@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="AI-powered loan advisor chatbot that helps you find the perfect loan through intelligent conversation and personalized matching." />
+    <meta name="keywords" content="loan advisor, chatbot, AI, loan matching, personal loans, mortgage, financing" />
+    <meta name="author" content="Loan Advisor Team" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Loan Advisor - AI-Powered Loan Matching" />
+    <meta property="og:description" content="Find the perfect loan through intelligent conversation with our AI-powered chatbot." />
+    <meta property="og:url" content="/" />
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:title" content="Loan Advisor - AI-Powered Loan Matching" />
+    <meta property="twitter:description" content="Find the perfect loan through intelligent conversation with our AI-powered chatbot." />
+    
+    <!-- Security headers -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <meta http-equiv="X-Frame-Options" content="DENY" />
+    <meta http-equiv="X-XSS-Protection" content="1; mode=block" />
+    <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin" />
+    
+    <!-- Preconnect to external domains for performance -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    
+    <!-- Favicon and app icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#3b82f6" />
+    <meta name="msapplication-TileColor" content="#3b82f6" />
+    <meta name="theme-color" content="#3b82f6" />
+    
+    <!-- PWA support -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Loan Advisor" />
+    
+    <title>Loan Advisor - AI-Powered Loan Matching Chatbot</title>
+    
+    <!-- Loading screen styles -->
+    <style>
+      /* Loading screen shown before React loads */
+      #loading-screen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+        font-family: 'Inter', sans-serif;
+      }
+      
+      .loading-logo {
+        width: 80px;
+        height: 80px;
+        background: white;
+        border-radius: 20px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 32px;
+        font-weight: bold;
+        color: #3b82f6;
+        margin-bottom: 24px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+      }
+      
+      .loading-title {
+        color: white;
+        font-size: 24px;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+      
+      .loading-subtitle {
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 16px;
+        margin-bottom: 32px;
+      }
+      
+      .loading-spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid rgba(255, 255, 255, 0.3);
+        border-top: 3px solid white;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      
+      .fade-out {
+        opacity: 0;
+        transition: opacity 0.5s ease-out;
+      }
+      
+      /* Hide loading screen when React is ready */
+      .loaded #loading-screen {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Loading screen -->
+    <div id="loading-screen">
+      <div class="loading-logo">LA</div>
+      <div class="loading-title">Loan Advisor</div>
+      <div class="loading-subtitle">AI-Powered Loan Matching</div>
+      <div class="loading-spinner"></div>
+    </div>
+    
+    <!-- React app root -->
+    <div id="root"></div>
+    
+    <!-- App loading script -->
+    <script>
+      // Hide loading screen when page is fully loaded
+      window.addEventListener('load', function() {
+        const loadingScreen = document.getElementById('loading-screen');
+        if (loadingScreen) {
+          loadingScreen.classList.add('fade-out');
+          setTimeout(() => {
+            document.body.classList.add('loaded');
+          }, 500);
+        }
+      });
+      
+      // Fallback: hide loading screen after 10 seconds
+      setTimeout(() => {
+        document.body.classList.add('loaded');
+      }, 10000);
+    </script>
+    
+    <!-- Vite script -->
+    <script type="module" src="/src/main.tsx"></script>
+    
+    <!-- Error handling for older browsers -->
+    <script>
+      if (!window.fetch) {
+        document.getElementById('root').innerHTML = `
+          <div style="
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 20px;
+            font-family: 'Inter', sans-serif;
+          ">
+            <div>
+              <h1 style="color: #dc2626; margin-bottom: 16px;">Browser Not Supported</h1>
+              <p style="color: #6b7280; margin-bottom: 24px;">
+                This application requires a modern browser with JavaScript enabled.
+              </p>
+              <p style="color: #6b7280;">
+                Please update your browser or enable JavaScript to continue.
+              </p>
+            </div>
+          </div>
+        `;
+        document.body.classList.add('loaded');
+      }
+    </script>
+  </body>
+</html>
