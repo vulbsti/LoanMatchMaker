@@ -170,7 +170,7 @@ class App {
       // Test Gemini API connection
       const geminiHealth = await this.geminiService.healthCheck();
       if (!geminiHealth) {
-        console.warn('Gemini API connection failed - some features may not work');
+        throw new Error('Gemini API connection failed. Cannot start application.');
       } else {
         console.log('Gemini API connection established');
       }

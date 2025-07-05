@@ -22,12 +22,13 @@ export class GeminiService {
         config: {
           temperature: options?.temperature || this.config.temperature,
           maxOutputTokens: options?.maxTokens || this.config.maxTokens,
+          thinkingConfig: { thinkingBudget: 0 },
         }
       });
-      
       const text = response.text;
       
       if (!text || text.trim().length === 0) {
+        console.log('Raw Gemini API response:', response); // Added logging
         throw new Error('Empty response from Gemini API');
       }
 
@@ -40,9 +41,9 @@ export class GeminiService {
 
   async healthCheck(): Promise<boolean> {
     try {
-      const response = await this.generateContent('Health check test', {
+      const response = await this.generateContent('I am doing Health check test ONLY SAY "HELLO"', {
         temperature: 0,
-        maxTokens: 10,
+        maxTokens: 1000,
       });
       return response.length > 0;
     } catch (error) {
