@@ -178,17 +178,36 @@ export class ParameterService {
   async extractParameterFromMessage(message: string): Promise<{ parameter: string; value: any } | null> {
     const lowerMessage = message.toLowerCase();
     
-    // Extract loan amount
-    const amountMatch = message.match(/\$?([\d,]+(?:\.\d{2})?)\s*(?:dollars?|k|thousand|million)?/i);
-    if (amountMatch && amountMatch[1]) {
-      let amount = parseFloat(amountMatch[1].replace(/,/g, ''));
-      if (lowerMessage.includes('k') || lowerMessage.includes('thousand')) {
-        amount *= 1000;
-      } else if (lowerMessage.includes('million')) {
-        amount *= 1000000;
-      }
-      if (validateLoanAmount(amount)) {
-        return { parameter: 'loanAmount', value: amount };
+    // Extract loan amount - Enhanced for Indian currency
+    const amountPatterns = [
+      // Indian crore/lakh patterns
+      /([\d.]+)\s*crores?/i,
+      /([\d.]+)\s*cr/i,
+      /([\d.]+)\s*lakhs?/i,
+      /([\d.]+)\s*lacs?/i,
+      // Standard patterns
+      /\$?([\d,]+(?:\.\d{2})?)\s*(?:dollars?|k|thousand|million)?/i
+    ];
+    
+    for (const pattern of amountPatterns) {
+      const amountMatch = message.match(pattern);
+      if (amountMatch && amountMatch[1]) {
+        let amount = parseFloat(amountMatch[1].replace(/,/g, ''));
+        
+        // Convert Indian currency
+        if (lowerMessage.includes('crore') || lowerMessage.includes(' cr')) {
+          amount *= 10000000; // 1 crore = 10 million
+        } else if (lowerMessage.includes('lakh') || lowerMessage.includes('lac')) {
+          amount *= 100000; // 1 lakh = 100,000
+        } else if (lowerMessage.includes('k') || lowerMessage.includes('thousand')) {
+          amount *= 1000;
+        } else if (lowerMessage.includes('million')) {
+          amount *= 1000000;
+        }
+        
+        if (validateLoanAmount(amount)) {
+          return { parameter: 'loanAmount', value: amount };
+        }
       }
     }
     
