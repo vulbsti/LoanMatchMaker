@@ -3,9 +3,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ParameterService = void 0;
 const errorHandler_1 = require("../middleware/errorHandler");
 const schemas_1 = require("../models/schemas");
+const gemini_1 = require("../config/gemini");
+const config_1 = require("../config");
 class ParameterService {
     constructor(database) {
         this.database = database;
+        this.geminiService = new gemini_1.GeminiService(config_1.config.gemini);
     }
     async updateParameter(sessionId, parameter, value) {
         try {
@@ -20,7 +23,7 @@ class ParameterService {
             await this.database.query(`UPDATE parameter_tracking 
          SET ${trackingColumn} = true, updated_at = CURRENT_TIMESTAMP
          WHERE session_id = $1`, [sessionId]);
-            await this.checkCompletionStatus(sessionId);
+            await this.updateCompletionPercentage(sessionId);
         }
         catch (error) {
             console.error('Parameter update error:', error);
@@ -108,6 +111,42 @@ class ParameterService {
         catch (error) {
             console.error('Get missing parameters error:', error);
             throw new Error('Failed to get missing parameters');
+        }
+    }
+    async extractParametersWithLLM(userMessage) {
+        try {
+            const prompt = (0, gemini_1.buildParameterExtractorPrompt)(userMessage);
+            const response = await this.geminiService.generateContent(prompt);
+            const jsonMatch = response.match(/\{.*\}/s);
+            if (jsonMatch) {
+                const extracted = JSON.parse(jsonMatch[0]);
+                const validatedParams = {};
+                if (extracted.loanAmount && (0, schemas_1.validateLoanAmount)(extracted.loanAmount)) {
+                    validatedParams.loanAmount = extracted.loanAmount;
+                }
+                if (extracted.annualIncome && (0, schemas_1.validateAnnualIncome)(extracted.annualIncome)) {
+                    validatedParams.annualIncome = extracted.annualIncome;
+                }
+                if (extracted.creditScore && (0, schemas_1.validateCreditScore)(extracted.creditScore)) {
+                    validatedParams.creditScore = extracted.creditScore;
+                }
+                if (extracted.employmentStatus && (0, schemas_1.validateEmploymentStatus)(extracted.employmentStatus)) {
+                    validatedParams.employmentStatus = extracted.employmentStatus;
+                }
+                if (extracted.loanPurpose && (0, schemas_1.validateLoanPurpose)(extracted.loanPurpose)) {
+                    validatedParams.loanPurpose = extracted.loanPurpose;
+                }
+                return validatedParams;
+            }
+            return {};
+        }
+        catch (error) {
+            console.error('LLM Parameter extraction error:', error);
+            const fallbackParam = await this.extractParameterFromMessage(userMessage);
+            if (fallbackParam) {
+                return { [fallbackParam.parameter]: fallbackParam.value };
+            }
+            return {};
         }
     }
     async extractParameterFromMessage(message) {
@@ -226,6 +265,24 @@ class ParameterService {
             loanPurpose: 'loan_purpose_collected',
         };
         return trackingMap[parameter] || `${parameter}_collected`;
+    }
+    async updateCompletionPercentage(sessionId) {
+        try {
+            const tracking = await this.getTrackingStatus(sessionId);
+            const collectedCount = [
+                tracking.loanAmountCollected,
+                tracking.annualIncomeCollected,
+                tracking.employmentStatusCollected,
+                tracking.creditScoreCollected,
+                tracking.loanPurposeCollected
+            ].filter(Boolean).length;
+            const totalCount = 5;
+            const completionPercentage = Math.round((collectedCount / totalCount) * 100);
+            await this.database.query(`UPDATE parameter_tracking SET completion_percentage = $1 WHERE session_id = $2`, [completionPercentage, sessionId]);
+        }
+        catch (error) {
+            console.error('Update completion percentage error:', error);
+        }
     }
     async checkCompletionStatus(sessionId) {
         try {

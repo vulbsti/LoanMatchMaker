@@ -34,12 +34,6 @@ class ChatController {
             }
             const sessionData = await this.sessionService.getSessionData(sessionId);
             await this.conversationService.addMessage(sessionId, 'user', message);
-            const extractedParam = await this.parameterService.extractParameterFromMessage(message);
-            if (extractedParam) {
-                await this.parameterService.updateParameter(sessionId, extractedParam.parameter, extractedParam.value);
-                sessionData.parameters = await this.parameterService.getParameters(sessionId);
-                sessionData.tracking = await this.parameterService.getTrackingStatus(sessionId);
-            }
             const messageContext = {
                 sessionId,
                 message,
@@ -57,10 +51,10 @@ class ChatController {
                 }
                 else {
                     agentResponse.response = 'I need a bit more information before I can find your perfect loan matches. Let\'s continue with a few more questions.';
-                    agentResponse.action = 'collect_parameter';
+                    agentResponse.action = 'continue';
                 }
             }
-            await this.conversationService.addMessage(sessionId, 'bot', agentResponse.response, 'mca', {
+            await this.conversationService.addMessage(sessionId, 'bot', agentResponse.response, undefined, {
                 action: agentResponse.action,
                 completionPercentage: agentResponse.completionPercentage,
             });
@@ -72,8 +66,7 @@ class ChatController {
                     action: agentResponse.action,
                     matches: agentResponse.matches,
                     completionPercentage: agentResponse.completionPercentage,
-                    requiresInput: agentResponse.requiresInput,
-                    suggestedReplies: agentResponse.suggestedReplies,
+                    requiresInput: agentResponse.response.includes('?'),
                     sessionId,
                 },
                 message: 'Message processed successfully',

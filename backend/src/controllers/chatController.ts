@@ -58,19 +58,6 @@ export class ChatController {
       // Store user message
       await this.conversationService.addMessage(sessionId, 'user', message);
       
-      // Try to extract parameters from the message
-      const extractedParam = await this.parameterService.extractParameterFromMessage(message);
-      if (extractedParam) {
-        await this.parameterService.updateParameter(
-          sessionId,
-          extractedParam.parameter,
-          extractedParam.value
-        );
-        // Refresh session data after parameter update
-        sessionData.parameters = await this.parameterService.getParameters(sessionId);
-        sessionData.tracking = await this.parameterService.getTrackingStatus(sessionId);
-      }
-      
       // Create message context for agents
       const messageContext: MessageContext = {
         sessionId,
@@ -80,7 +67,7 @@ export class ChatController {
         conversationHistory: sessionData.conversationHistory.slice(-5), // Last 5 messages for context
       };
       
-      // Process through dual-agent system
+      // Process through agent system
       const agentResponse = await this.agentOrchestrator.processMessage(messageContext);
       
       // Handle agent decisions
@@ -96,7 +83,7 @@ export class ChatController {
           agentResponse.response = `Great! I found ${matches.length} excellent loan matches for you. Here are your top options based on your profile.`;
         } else {
           agentResponse.response = 'I need a bit more information before I can find your perfect loan matches. Let\'s continue with a few more questions.';
-          agentResponse.action = 'collect_parameter';
+          agentResponse.action = 'continue';
         }
       }
       
@@ -105,7 +92,7 @@ export class ChatController {
         sessionId,
         'bot',
         agentResponse.response,
-        'mca',
+        undefined, // No longer need to specify agent type
         {
           action: agentResponse.action,
           completionPercentage: agentResponse.completionPercentage,
@@ -122,8 +109,7 @@ export class ChatController {
           action: agentResponse.action,
           matches: agentResponse.matches,
           completionPercentage: agentResponse.completionPercentage,
-          requiresInput: agentResponse.requiresInput,
-          suggestedReplies: agentResponse.suggestedReplies,
+          requiresInput: agentResponse.response.includes('?'), // Simple check for questions
           sessionId,
         },
         message: 'Message processed successfully',

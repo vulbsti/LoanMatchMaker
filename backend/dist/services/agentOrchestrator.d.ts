@@ -6,17 +6,6 @@ export declare class AgentOrchestrator {
     private parameterService;
     constructor(geminiService: GeminiService, parameterService: ParameterService);
     processMessage(context: MessageContext): Promise<AgentResponse>;
-    private consultPCA;
-    private processMCA;
-    private parsePCAResponse;
-    private parseMCAResponse;
-    private orchestrateResponse;
-    private extractPCAGuidanceFromText;
-    private detectTone;
-    private requiresUserInput;
-    private extractSuggestedReplies;
-    private getFallbackPCAGuidance;
-    private getFallbackMCAResponse;
-    private getFallbackParameterQuestion;
+    private formatHistory;
 }
 //# sourceMappingURL=agentOrchestrator.d.ts.map

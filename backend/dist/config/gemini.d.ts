@@ -15,9 +15,18 @@ export declare class GeminiService {
 }
 export declare const createGeminiService: (config: GeminiConfig) => GeminiService;
 export declare const SYSTEM_PROMPTS: {
-    MCA: string;
-    PCA: string;
+    LOAN_ADVISOR_AGENT: string;
+    PARAMETER_EXTRACTOR_AGENT: string;
 };
-export declare const buildPCAPrompt: (context: any) => string;
-export declare const buildMCAPrompt: (context: any, guidance: any) => string;
+export declare const buildLoanAdvisorPrompt: (context: {
+    conversationHistory: {
+        role: "user" | "assistant";
+        parts: {
+            text: string;
+        }[];
+    }[];
+    collectedParameters: Partial<any>;
+    missingParameters: (string)[];
+}) => any;
+export declare const buildParameterExtractorPrompt: (userMessage: string) => string;
 //# sourceMappingURL=gemini.d.ts.map

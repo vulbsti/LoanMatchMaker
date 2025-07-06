@@ -3,11 +3,17 @@ import { LoanParameters, ParameterTracking } from '../models/interfaces';
 import { LoanParametersRow, ParameterTrackingRow } from '../models/database-types';
 import { createNotFoundError, createValidationError } from '../middleware/errorHandler';
 import { validateLoanAmount, validateCreditScore, validateAnnualIncome, validateEmploymentStatus, validateLoanPurpose } from '../models/schemas';
+import { GeminiService, buildParameterExtractorPrompt } from '../config/gemini';
+import { config } from '../config';
 
 export class ParameterService {
-  constructor(private database: DatabaseService) {}
+  private geminiService: GeminiService;
 
-  async updateParameter(sessionId: string, parameter: string, value: any): Promise<void> {
+  constructor(private database: DatabaseService) {
+    this.geminiService = new GeminiService(config.gemini);
+  }
+
+  async updateParameter(sessionId: string, parameter: keyof LoanParameters, value: any): Promise<void> {
     try {
       // Validate the parameter value
       this.validateParameterValue(parameter, value);
@@ -30,8 +36,8 @@ export class ParameterService {
         [sessionId]
       );
       
-      // Check if all parameters are collected
-      await this.checkCompletionStatus(sessionId);
+      // Update completion percentage
+      await this.updateCompletionPercentage(sessionId);
       
     } catch (error) {
       console.error('Parameter update error:', error);
@@ -110,10 +116,10 @@ export class ParameterService {
     }
   }
 
-  async getMissingParameters(sessionId: string): Promise<string[]> {
+  async getMissingParameters(sessionId: string): Promise<(keyof LoanParameters)[]> {
     try {
       const tracking = await this.getTrackingStatus(sessionId);
-      const missing: string[] = [];
+      const missing: (keyof LoanParameters)[] = [];
       
       if (!tracking.loanAmountCollected) missing.push('loanAmount');
       if (!tracking.annualIncomeCollected) missing.push('annualIncome');
@@ -125,6 +131,47 @@ export class ParameterService {
     } catch (error) {
       console.error('Get missing parameters error:', error);
       throw new Error('Failed to get missing parameters');
+    }
+  }
+
+  async extractParametersWithLLM(userMessage: string): Promise<Partial<LoanParameters>> {
+    try {
+      const prompt = buildParameterExtractorPrompt(userMessage);
+      const response = await this.geminiService.generateContent(prompt);
+      const jsonMatch = response.match(/\{.*\}/s);
+      if (jsonMatch) {
+        const extracted = JSON.parse(jsonMatch[0]);
+        
+        // Validate extracted parameters before returning
+        const validatedParams: Partial<LoanParameters> = {};
+        
+        if (extracted.loanAmount && validateLoanAmount(extracted.loanAmount)) {
+          validatedParams.loanAmount = extracted.loanAmount;
+        }
+        if (extracted.annualIncome && validateAnnualIncome(extracted.annualIncome)) {
+          validatedParams.annualIncome = extracted.annualIncome;
+        }
+        if (extracted.creditScore && validateCreditScore(extracted.creditScore)) {
+          validatedParams.creditScore = extracted.creditScore;
+        }
+        if (extracted.employmentStatus && validateEmploymentStatus(extracted.employmentStatus)) {
+          validatedParams.employmentStatus = extracted.employmentStatus;
+        }
+        if (extracted.loanPurpose && validateLoanPurpose(extracted.loanPurpose)) {
+          validatedParams.loanPurpose = extracted.loanPurpose;
+        }
+        
+        return validatedParams;
+      }
+      return {};
+    } catch (error) {
+      console.error('LLM Parameter extraction error:', error);
+      // Fallback to regex-based extraction
+      const fallbackParam = await this.extractParameterFromMessage(userMessage);
+      if (fallbackParam) {
+        return { [fallbackParam.parameter]: fallbackParam.value } as Partial<LoanParameters>;
+      }
+      return {};
     }
   }
 
@@ -203,7 +250,7 @@ export class ParameterService {
     return null;
   }
 
-  private validateParameterValue(parameter: string, value: any): void {
+  private validateParameterValue(parameter: keyof LoanParameters, value: any): void {
     switch (parameter) {
       case 'loanAmount':
         if (!validateLoanAmount(value)) {
@@ -235,7 +282,7 @@ export class ParameterService {
     }
   }
 
-  private getColumnName(parameter: string): string {
+  private getColumnName(parameter: keyof LoanParameters): string {
     const columnMap: { [key: string]: string } = {
       loanAmount: 'loan_amount',
       annualIncome: 'annual_income',
@@ -249,7 +296,7 @@ export class ParameterService {
     return columnMap[parameter] || parameter;
   }
 
-  private getTrackingColumnName(parameter: string): string {
+  private getTrackingColumnName(parameter: keyof LoanParameters): string {
     const trackingMap: { [key: string]: string } = {
       loanAmount: 'loan_amount_collected',
       annualIncome: 'annual_income_collected',
@@ -259,6 +306,29 @@ export class ParameterService {
     };
     
     return trackingMap[parameter] || `${parameter}_collected`;
+  }
+
+  private async updateCompletionPercentage(sessionId: string): Promise<void> {
+    try {
+      const tracking = await this.getTrackingStatus(sessionId);
+      const collectedCount = [
+        tracking.loanAmountCollected,
+        tracking.annualIncomeCollected,
+        tracking.employmentStatusCollected,
+        tracking.creditScoreCollected,
+        tracking.loanPurposeCollected
+      ].filter(Boolean).length;
+      
+      const totalCount = 5; // Total number of required parameters
+      const completionPercentage = Math.round((collectedCount / totalCount) * 100);
+
+      await this.database.query(
+        `UPDATE parameter_tracking SET completion_percentage = $1 WHERE session_id = $2`,
+        [completionPercentage, sessionId]
+      );
+    } catch (error) {
+      console.error('Update completion percentage error:', error);
+    }
   }
 
   private async checkCompletionStatus(sessionId: string): Promise<void> {

@@ -10,16 +10,16 @@ export declare const LoanParameterSchema: z.ZodObject<{
 }, "strip", z.ZodTypeAny, {
     loanAmount: number;
     annualIncome: number;
-    employmentStatus: "salaried" | "self-employed" | "freelancer" | "unemployed";
     creditScore: number;
+    employmentStatus: "salaried" | "self-employed" | "freelancer" | "unemployed";
     loanPurpose: "home" | "auto" | "personal" | "business" | "education" | "debt-consolidation";
     debtToIncomeRatio?: number | undefined;
     employmentDuration?: number | undefined;
 }, {
     loanAmount: number;
     annualIncome: number;
-    employmentStatus: "salaried" | "self-employed" | "freelancer" | "unemployed";
     creditScore: number;
+    employmentStatus: "salaried" | "self-employed" | "freelancer" | "unemployed";
     loanPurpose: "home" | "auto" | "personal" | "business" | "education" | "debt-consolidation";
     debtToIncomeRatio?: number | undefined;
     employmentDuration?: number | undefined;
@@ -52,13 +52,13 @@ export declare const ParameterUpdateSchema: z.ZodObject<{
     parameter: z.ZodEnum<["loanAmount", "annualIncome", "employmentStatus", "creditScore", "loanPurpose", "debtToIncomeRatio", "employmentDuration"]>;
     value: z.ZodUnion<[z.ZodNumber, z.ZodString]>;
 }, "strip", z.ZodTypeAny, {
-    value: string | number;
     sessionId: string;
-    parameter: "loanAmount" | "annualIncome" | "employmentStatus" | "creditScore" | "loanPurpose" | "debtToIncomeRatio" | "employmentDuration";
+    parameter: "loanAmount" | "annualIncome" | "creditScore" | "employmentStatus" | "loanPurpose" | "debtToIncomeRatio" | "employmentDuration";
+    value: string | number;
 }, {
-    value: string | number;
     sessionId: string;
-    parameter: "loanAmount" | "annualIncome" | "employmentStatus" | "creditScore" | "loanPurpose" | "debtToIncomeRatio" | "employmentDuration";
+    parameter: "loanAmount" | "annualIncome" | "creditScore" | "employmentStatus" | "loanPurpose" | "debtToIncomeRatio" | "employmentDuration";
+    value: string | number;
 }>;
 export declare const MatchRequestSchema: z.ZodObject<{
     sessionId: z.ZodString;

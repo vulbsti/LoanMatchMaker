@@ -64,34 +64,11 @@ export interface ParameterTracking {
     completionPercentage: number;
     updatedAt: Date;
 }
-export interface PCAGuidance {
-    action: 'collect_parameter' | 'trigger_matching' | 'answer_question' | 'redirect';
-    nextParameter?: keyof LoanParameters;
-    priority: 'high' | 'medium' | 'low';
-    completionPercentage: number;
-    reasoning: string;
-    parameterUpdate?: {
-        name: keyof LoanParameters;
-        value: string | number;
-    };
-}
-export interface MCAResponse {
-    response: string;
-    tone: 'helpful' | 'encouraging' | 'informative' | 'congratulatory';
-    requiresInput: boolean;
-    suggestedReplies?: string[] | undefined;
-}
 export interface AgentResponse {
     response: string;
-    action: 'collect_parameter' | 'trigger_matching' | 'answer_question' | 'redirect';
+    action: 'continue' | 'trigger_matching';
     matches?: LenderMatch[];
-    parameterUpdate?: {
-        name: keyof LoanParameters;
-        value: string | number;
-    } | undefined;
     completionPercentage: number;
-    requiresInput: boolean;
-    suggestedReplies?: string[] | undefined;
 }
 export interface MessageContext {
     sessionId: string;
