@@ -10,6 +10,13 @@ export declare class ParameterService {
     isComplete(sessionId: string): Promise<boolean>;
     getMissingParameters(sessionId: string): Promise<(keyof LoanParameters)[]>;
     extractParametersWithLLM(userMessage: string): Promise<Partial<LoanParameters>>;
+    private convertToINRFormat;
+    private buildEnhancedExtractionPrompt;
+    private validateLoanAmount;
+    private validateAnnualIncome;
+    private validateCreditScore;
+    private validateEmploymentStatus;
+    private validateLoanPurpose;
     extractParameterFromMessage(message: string): Promise<{
         parameter: string;
         value: any;

@@ -4,9 +4,9 @@
 export interface LoanParameters {
   loanAmount: number;
   annualIncome: number;
-  employmentStatus: 'salaried' | 'self-employed' | 'freelancer' | 'unemployed';
+  employmentStatus: 'salaried' | 'self-employed' | 'freelancer' | 'student' | 'unemployed';
   creditScore: number;
-  loanPurpose: 'home' | 'auto' | 'personal' | 'business' | 'education' | 'debt-consolidation';
+  loanPurpose: 'home' | 'vehicle' | 'education' | 'business' | 'startup' | 'eco' | 'emergency' | 'gold-backed' | 'personal';
   debtToIncomeRatio?: number;
   employmentDuration?: number;
 }
@@ -225,16 +225,20 @@ export const EMPLOYMENT_OPTIONS = [
   'salaried',
   'self-employed', 
   'freelancer',
+  'student',
   'unemployed'
 ] as const;
 
 export const LOAN_PURPOSE_OPTIONS = [
   'home',
-  'auto', 
-  'personal',
-  'business',
+  'vehicle', 
   'education',
-  'debt-consolidation'
+  'business',
+  'startup',
+  'eco',
+  'emergency',
+  'gold-backed',
+  'personal'
 ] as const;
 
 export const API_ENDPOINTS = {

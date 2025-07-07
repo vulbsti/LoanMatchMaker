@@ -115,25 +115,32 @@ class ParameterService {
     }
     async extractParametersWithLLM(userMessage) {
         try {
-            const prompt = (0, gemini_1.buildParameterExtractorPrompt)(userMessage);
-            const response = await this.geminiService.generateContent(prompt);
-            const jsonMatch = response.match(/\{.*\}/s);
+            const enhancedPrompt = this.buildEnhancedExtractionPrompt(userMessage);
+            const response = await this.geminiService.generateContent(enhancedPrompt);
+            const jsonMatch = response.match(/```json\s*(\{[\s\S]*?\})\s*```/) ||
+                response.match(/(\{[\s\S]*?\})/);
             if (jsonMatch) {
-                const extracted = JSON.parse(jsonMatch[0]);
+                const extracted = JSON.parse(jsonMatch[1] || jsonMatch[0]);
+                if (extracted.loanAmount) {
+                    extracted.loanAmount = this.convertToINRFormat(extracted.loanAmount);
+                }
+                if (extracted.annualIncome) {
+                    extracted.annualIncome = this.convertToINRFormat(extracted.annualIncome);
+                }
                 const validatedParams = {};
-                if (extracted.loanAmount && (0, schemas_1.validateLoanAmount)(extracted.loanAmount)) {
+                if (extracted.loanAmount && this.validateLoanAmount(extracted.loanAmount)) {
                     validatedParams.loanAmount = extracted.loanAmount;
                 }
-                if (extracted.annualIncome && (0, schemas_1.validateAnnualIncome)(extracted.annualIncome)) {
+                if (extracted.annualIncome && this.validateAnnualIncome(extracted.annualIncome)) {
                     validatedParams.annualIncome = extracted.annualIncome;
                 }
-                if (extracted.creditScore && (0, schemas_1.validateCreditScore)(extracted.creditScore)) {
+                if (extracted.creditScore && this.validateCreditScore(extracted.creditScore)) {
                     validatedParams.creditScore = extracted.creditScore;
                 }
-                if (extracted.employmentStatus && (0, schemas_1.validateEmploymentStatus)(extracted.employmentStatus)) {
+                if (extracted.employmentStatus && this.validateEmploymentStatus(extracted.employmentStatus)) {
                     validatedParams.employmentStatus = extracted.employmentStatus;
                 }
-                if (extracted.loanPurpose && (0, schemas_1.validateLoanPurpose)(extracted.loanPurpose)) {
+                if (extracted.loanPurpose && this.validateLoanPurpose(extracted.loanPurpose)) {
                     validatedParams.loanPurpose = extracted.loanPurpose;
                 }
                 return validatedParams;
@@ -141,76 +148,103 @@ class ParameterService {
             return {};
         }
         catch (error) {
-            console.error('LLM Parameter extraction error:', error);
-            const fallbackParam = await this.extractParameterFromMessage(userMessage);
-            if (fallbackParam) {
-                return { [fallbackParam.parameter]: fallbackParam.value };
-            }
+            console.error('Enhanced LLM Parameter extraction error:', error);
             return {};
         }
     }
+    convertToINRFormat(amount) {
+        if (amount >= 10000000) {
+            return amount;
+        }
+        else if (amount >= 100000 && amount < 10000000) {
+            return amount;
+        }
+        else if (amount >= 1000 && amount < 100000) {
+            return amount;
+        }
+        else if (amount < 1000 && amount > 0) {
+            if (amount <= 10) {
+                return amount * 10000000;
+            }
+            else if (amount <= 1000) {
+                return amount * 100000;
+            }
+        }
+        return amount;
+    }
+    buildEnhancedExtractionPrompt(userMessage) {
+        return `You are an expert parameter extraction agent for a loan advisor system in India.
+
+TASK: Extract loan-related information from the user's message and return ONLY valid parameters found.
+
+USER MESSAGE: "${userMessage}"
+
+EXTRACTION RULES:
+1. **Currency (All amounts in INR):**
+   - 1 crore = 10,000,000 INR
+   - 1 lakh = 100,000 INR  
+   - 2.5 crore = 25,000,000 INR
+   - Convert all amounts to full INR format
+
+2. **Employment Status Mapping:**
+   - "software engineer", "employed", "job", "salaried employee" → "salaried"
+   - "business owner", "freelance", "self employed" → "self-employed"
+   - "contractor", "gig worker" → "freelancer"
+   - "unemployed", "jobless" → "unemployed"
+
+3. **Loan Purpose Mapping:**
+   - "car", "vehicle", "BMW", "auto" → "auto"
+   - "house", "property", "home" → "home"
+   - "business", "startup" → "business"
+   - "education", "study", "MBA" → "education"
+   - "personal", "wedding", "medical" → "personal"
+   - "debt consolidation", "pay off loans" → "debt-consolidation"
+
+4. **Only extract explicitly mentioned information**
+5. **Return empty object if no valid parameters found**
+
+OUTPUT FORMAT (JSON only):
+\`\`\`json
+{
+  "loanAmount": <number_in_full_INR>,
+  "annualIncome": <number_in_full_INR>,
+  "creditScore": <number_300_to_850>,
+  "employmentStatus": <"salaried"|"self-employed"|"freelancer"|"unemployed">,
+  "loanPurpose": <"auto"|"home"|"personal"|"business"|"education"|"debt-consolidation">
+}
+\`\`\`
+
+Example:
+User: "I need 2 crore for buying a car, I'm a software engineer earning 15 lakhs"
+Response:
+\`\`\`json
+{
+  "loanAmount": 20000000,
+  "loanPurpose": "auto", 
+  "employmentStatus": "salaried",
+  "annualIncome": 1500000
+}
+\`\`\``;
+    }
+    validateLoanAmount(amount) {
+        return amount >= 100000 && amount <= 100000000;
+    }
+    validateAnnualIncome(income) {
+        return income >= 100000 && income <= 50000000;
+    }
+    validateCreditScore(score) {
+        return score >= 300 && score <= 850;
+    }
+    validateEmploymentStatus(status) {
+        const validStatuses = ['salaried', 'self-employed', 'freelancer', 'unemployed'];
+        return validStatuses.includes(status);
+    }
+    validateLoanPurpose(purpose) {
+        const validPurposes = ['auto', 'home', 'personal', 'business', 'education', 'debt-consolidation'];
+        return validPurposes.includes(purpose);
+    }
     async extractParameterFromMessage(message) {
-        const lowerMessage = message.toLowerCase();
-        const amountMatch = message.match(/\$?([\d,]+(?:\.\d{2})?)\s*(?:dollars?|k|thousand|million)?/i);
-        if (amountMatch && amountMatch[1]) {
-            let amount = parseFloat(amountMatch[1].replace(/,/g, ''));
-            if (lowerMessage.includes('k') || lowerMessage.includes('thousand')) {
-                amount *= 1000;
-            }
-            else if (lowerMessage.includes('million')) {
-                amount *= 1000000;
-            }
-            if ((0, schemas_1.validateLoanAmount)(amount)) {
-                return { parameter: 'loanAmount', value: amount };
-            }
-        }
-        const incomePatterns = [
-            /(?:make|earn|income|salary).*?\$?([\d,]+(?:\.\d{2})?)\s*(?:per year|annually|yearly|k|thousand)?/i,
-            /annual income.*?\$?([\d,]+(?:\.\d{2})?)\s*(?:k|thousand)?/i,
-        ];
-        for (const pattern of incomePatterns) {
-            const match = message.match(pattern);
-            if (match && match[1]) {
-                let income = parseFloat(match[1].replace(/,/g, ''));
-                if (lowerMessage.includes('k') || lowerMessage.includes('thousand')) {
-                    income *= 1000;
-                }
-                if ((0, schemas_1.validateAnnualIncome)(income)) {
-                    return { parameter: 'annualIncome', value: income };
-                }
-            }
-        }
-        const scoreMatch = message.match(/(?:credit score|fico|score).*?(\d{3})/i);
-        if (scoreMatch && scoreMatch[1]) {
-            const score = parseInt(scoreMatch[1]);
-            if ((0, schemas_1.validateCreditScore)(score)) {
-                return { parameter: 'creditScore', value: score };
-            }
-        }
-        const employmentPatterns = {
-            salaried: /salaried|employed|full.?time|employee/i,
-            'self-employed': /self.?employed|freelance|contractor|own business/i,
-            freelancer: /freelance|freelancer|gig work|independent/i,
-            unemployed: /unemployed|jobless|not working|between jobs/i,
-        };
-        for (const [status, pattern] of Object.entries(employmentPatterns)) {
-            if (pattern.test(message)) {
-                return { parameter: 'employmentStatus', value: status };
-            }
-        }
-        const purposePatterns = {
-            home: /house|home|mortgage|property|real estate/i,
-            auto: /car|auto|vehicle|truck|motorcycle/i,
-            personal: /personal|vacation|wedding|medical|emergency/i,
-            business: /business|startup|company|commercial/i,
-            education: /education|school|college|student|tuition/i,
-            'debt-consolidation': /debt consolidation|consolidate|refinance|pay off debt/i,
-        };
-        for (const [purpose, pattern] of Object.entries(purposePatterns)) {
-            if (pattern.test(message)) {
-                return { parameter: 'loanPurpose', value: purpose };
-            }
-        }
+        console.warn('extractParameterFromMessage is deprecated. Use extractParametersWithLLM instead.');
         return null;
     }
     validateParameterValue(parameter, value) {

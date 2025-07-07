@@ -99,8 +99,8 @@ export const validateParameterValue = (req: Request, res: Response, next: NextFu
   try {
     switch (parameter) {
       case 'loanAmount':
-        if (typeof value !== 'number' || value < 1000 || value > 500000) {
-          throw new Error('Loan amount must be between $1,000 and $500,000');
+        if (typeof value !== 'number' || value < 100000 || value > 100000000) {
+          throw new Error('Loan amount must be between ₹1,00,000 and ₹10,00,00,000');
         }
         break;
       

@@ -92,7 +92,7 @@ export const validateConfig = (): void => {
   }
 
   // Validate Gemini model name
-  const validModels = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'];
+  const validModels = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite-preview-06-17'];
   if (!validModels.includes(config.gemini.model)) {
     console.warn(`Warning: Using non-standard Gemini model "${config.gemini.model}". Recommended models: ${validModels.join(', ')}`);
   }

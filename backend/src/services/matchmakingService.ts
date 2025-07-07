@@ -2,8 +2,11 @@ import { DatabaseService } from '../config/database';
 import { LoanParameters, Lender, LenderMatch, ScoringResult } from '../models/interfaces';
 import { LenderRow, MatchResultRow, MatchingStatsRow, LenderStatsRow } from '../models/database-types';
 import { createNotFoundError, createValidationError } from '../middleware/errorHandler';
+import { mlAdapter } from '../training/mlAdapter';
 
 export class MatchmakingService {
+  private useMLPredictions: boolean = true; // Feature flag for ML vs rule-based
+
   constructor(private database: DatabaseService) {}
 
   async findMatches(sessionId: string, userParams: LoanParameters): Promise<LenderMatch[]> {
@@ -11,35 +14,142 @@ export class MatchmakingService {
       // Get all lenders from database
       const lenders = await this.getAllLenders();
       
-      // Calculate scores for each lender
-      const scoredLenders = await Promise.all(
-        lenders.map(async (lender) => {
-          const scores = this.calculateLenderScore(userParams, lender);
-          return {
-            ...lender,
-            ...scores,
-            confidence: this.calculateConfidence(scores, userParams),
-          };
-        })
-      );
+      // Check if ML model is available
+      const mlSetup = await mlAdapter.checkSetup();
       
-      // Filter eligible lenders (must have eligibility score > 0)
-      const eligibleLenders = scoredLenders.filter(l => l.eligibilityScore > 0);
-      
-      // Sort by final score descending
-      const sortedLenders = eligibleLenders.sort((a, b) => b.finalScore - a.finalScore);
-      
-      // Get top 3 matches
-      const topMatches = sortedLenders.slice(0, 3);
-      
-      // Store results in database
-      await this.storeMatchResults(sessionId, topMatches);
-      
-      return topMatches;
+      if (this.useMLPredictions && mlSetup.isReady) {
+        return await this.findMatchesWithML(sessionId, userParams, lenders);
+      } else {
+        console.log('Using rule-based matching (ML not available):', mlSetup.message);
+        return await this.findMatchesRuleBased(sessionId, userParams, lenders);
+      }
     } catch (error) {
       console.error('Find matches error:', error);
       throw new Error('Failed to find loan matches');
     }
+  }
+
+  /**
+   * ML-based matching using trained model
+   */
+  private async findMatchesWithML(
+    sessionId: string, 
+    userParams: LoanParameters, 
+    lenders: Lender[]
+  ): Promise<LenderMatch[]> {
+    try {
+      // Convert user parameters to ML format
+      const userProfile = {
+        loanAmount: userParams.loanAmount,
+        annualIncome: userParams.annualIncome,
+        creditScore: userParams.creditScore,
+        employmentStatus: userParams.employmentStatus,
+        loanPurpose: userParams.loanPurpose
+      };
+
+      // Convert lenders to ML format
+      const lenderData = lenders.map(lender => ({
+        id: lender.id,
+        name: lender.name,
+        minLoanAmount: lender.minLoanAmount,
+        maxLoanAmount: lender.maxLoanAmount,
+        minIncome: lender.minIncome,
+        employmentTypes: lender.employmentTypes,
+        minCreditScore: lender.minCreditScore,
+        interestRate: lender.interestRate,
+        loanPurpose: lender.loanPurpose,
+        specialEligibility: lender.specialEligibility
+      }));
+
+      // Get ML predictions
+      const mlPredictions = await mlAdapter.getTopRecommendations(userProfile, lenderData, 5);
+
+      // Convert ML predictions to LenderMatch format
+      const matches: LenderMatch[] = mlPredictions.map((prediction, index) => {
+        const originalLender = lenders.find(l => l.id === prediction.lenderId);
+        if (!originalLender) {
+          throw new Error(`Lender ${prediction.lenderId} not found`);
+        }
+
+        return {
+          ...originalLender,
+          eligibilityScore: prediction.matchScore > 50 ? 85 : 65, // Convert ML score to eligibility
+          qualityScore: Math.round(prediction.matchScore * 0.8), // Scale ML score to quality
+          affordabilityScore: Math.round(prediction.matchScore * 0.7), // ML-derived affordability
+          specializationScore: Math.round(prediction.matchScore * 0.6), // ML-derived specialization
+          finalScore: Math.round(prediction.matchScore),
+          confidence: prediction.confidence || 0.8,
+          reasons: prediction.reasons || this.generateMLReasons(prediction.matchScore),
+          warnings: [], // ML doesn't generate warnings yet
+          rank: index + 1
+        };
+      });
+
+      // Store results in database
+      await this.storeMatchResults(sessionId, matches);
+
+      return matches;
+    } catch (error) {
+      console.error('ML matching error, falling back to rule-based:', error);
+      return await this.findMatchesRuleBased(sessionId, userParams, lenders);
+    }
+  }
+
+  /**
+   * Rule-based matching (fallback)
+   */
+  private async findMatchesRuleBased(
+    sessionId: string, 
+    userParams: LoanParameters, 
+    lenders: Lender[]
+  ): Promise<LenderMatch[]> {
+    // Calculate scores for each lender
+    const scoredLenders = await Promise.all(
+      lenders.map(async (lender) => {
+        const scores = this.calculateLenderScore(userParams, lender);
+        return {
+          ...lender,
+          ...scores,
+          confidence: this.calculateConfidence(scores, userParams),
+        };
+      })
+    );
+    
+    // Filter eligible lenders (must have eligibility score > 0)
+    const eligibleLenders = scoredLenders.filter(l => l.eligibilityScore > 0);
+    
+    // Sort by final score descending
+    const sortedLenders = eligibleLenders.sort((a, b) => b.finalScore - a.finalScore);
+    
+    // Get top 3 matches
+    const topMatches = sortedLenders.slice(0, 3);
+    
+    // Store results in database
+    await this.storeMatchResults(sessionId, topMatches);
+    
+    return topMatches;
+  }
+
+  /**
+   * Generate reasons for ML predictions
+   */
+  private generateMLReasons(matchScore: number): string[] {
+    const reasons = [];
+    
+    if (matchScore >= 80) {
+      reasons.push("Excellent match based on ML analysis");
+      reasons.push("High compatibility with your profile");
+    } else if (matchScore >= 60) {
+      reasons.push("Good match based on ML analysis");
+      reasons.push("Suitable for your requirements");
+    } else if (matchScore >= 40) {
+      reasons.push("Fair match based on ML analysis");
+      reasons.push("Meets basic eligibility criteria");
+    } else {
+      reasons.push("Basic eligibility match");
+    }
+    
+    return reasons;
   }
 
   async getAllLenders(): Promise<Lender[]> {
@@ -200,17 +310,17 @@ export class MatchmakingService {
     }
     
     // Startups
-    if (specialEligibility.includes('startup') && user.loanPurpose === 'business') {
+    if (specialEligibility.includes('startup') && user.loanPurpose === 'startup') {
       return true;
     }
     
-    // Eco-friendly (auto loans)
-    if (specialEligibility.includes('eco') && user.loanPurpose === 'auto') {
+    // Eco-friendly loans
+    if (specialEligibility.includes('eco') && user.loanPurpose === 'eco') {
       return true;
     }
     
     // Luxury vehicles
-    if (specialEligibility.includes('luxury') && user.loanPurpose === 'auto' && user.loanAmount >= 50000) {
+    if (specialEligibility.includes('luxury') && user.loanPurpose === 'vehicle' && user.loanAmount >= 50000) {
       return true;
     }
     

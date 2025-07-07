@@ -6,6 +6,10 @@ import { MatchmakingService } from '../services/matchmakingService';
 import { DatabaseService } from '../config/database';
 import { config } from '../config';
 
+// Valid options for parameter validation
+const VALID_EMPLOYMENT_STATUS = ['salaried', 'self-employed', 'freelancer', 'student', 'unemployed'] as const;
+const VALID_LOAN_PURPOSE = ['home', 'vehicle', 'education', 'business', 'startup', 'eco', 'emergency', 'gold-backed', 'personal'] as const;
+
 export class LoanController {
   private sessionService: SessionService;
   private parameterService: ParameterService;
@@ -387,15 +391,15 @@ export class LoanController {
       // Validate individual parameters
       const validation = {
         loanAmount: parameters.loanAmount ? 
-          parameters.loanAmount >= 1000 && parameters.loanAmount <= 500000 : false,
+          parameters.loanAmount >= 100000 && parameters.loanAmount <= 100000000 : false,
         annualIncome: parameters.annualIncome ? 
           parameters.annualIncome > 0 : false,
         creditScore: parameters.creditScore ? 
           parameters.creditScore >= 300 && parameters.creditScore <= 850 : false,
         employmentStatus: parameters.employmentStatus ? 
-          ['salaried', 'self-employed', 'freelancer', 'unemployed'].includes(parameters.employmentStatus) : false,
+          VALID_EMPLOYMENT_STATUS.includes(parameters.employmentStatus) : false,
         loanPurpose: parameters.loanPurpose ? 
-          ['home', 'auto', 'personal', 'business', 'education', 'debt-consolidation'].includes(parameters.loanPurpose) : false,
+          VALID_LOAN_PURPOSE.includes(parameters.loanPurpose) : false,
       };
       
       const isValid = Object.values(validation).every(Boolean) && missingParameters.length === 0;

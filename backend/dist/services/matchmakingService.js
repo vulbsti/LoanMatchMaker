@@ -1,31 +1,110 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MatchmakingService = void 0;
+const mlAdapter_1 = require("../training/mlAdapter");
 class MatchmakingService {
     constructor(database) {
         this.database = database;
+        this.useMLPredictions = true;
     }
     async findMatches(sessionId, userParams) {
         try {
             const lenders = await this.getAllLenders();
-            const scoredLenders = await Promise.all(lenders.map(async (lender) => {
-                const scores = this.calculateLenderScore(userParams, lender);
-                return {
-                    ...lender,
-                    ...scores,
-                    confidence: this.calculateConfidence(scores, userParams),
-                };
-            }));
-            const eligibleLenders = scoredLenders.filter(l => l.eligibilityScore > 0);
-            const sortedLenders = eligibleLenders.sort((a, b) => b.finalScore - a.finalScore);
-            const topMatches = sortedLenders.slice(0, 3);
-            await this.storeMatchResults(sessionId, topMatches);
-            return topMatches;
+            const mlSetup = await mlAdapter_1.mlAdapter.checkSetup();
+            if (this.useMLPredictions && mlSetup.isReady) {
+                return await this.findMatchesWithML(sessionId, userParams, lenders);
+            }
+            else {
+                console.log('Using rule-based matching (ML not available):', mlSetup.message);
+                return await this.findMatchesRuleBased(sessionId, userParams, lenders);
+            }
         }
         catch (error) {
             console.error('Find matches error:', error);
             throw new Error('Failed to find loan matches');
         }
+    }
+    async findMatchesWithML(sessionId, userParams, lenders) {
+        try {
+            const userProfile = {
+                loanAmount: userParams.loanAmount,
+                annualIncome: userParams.annualIncome,
+                creditScore: userParams.creditScore,
+                employmentStatus: userParams.employmentStatus,
+                loanPurpose: userParams.loanPurpose
+            };
+            const lenderData = lenders.map(lender => ({
+                id: lender.id,
+                name: lender.name,
+                minLoanAmount: lender.minLoanAmount,
+                maxLoanAmount: lender.maxLoanAmount,
+                minIncome: lender.minIncome,
+                employmentTypes: lender.employmentTypes,
+                minCreditScore: lender.minCreditScore,
+                interestRate: lender.interestRate,
+                loanPurpose: lender.loanPurpose,
+                specialEligibility: lender.specialEligibility
+            }));
+            const mlPredictions = await mlAdapter_1.mlAdapter.getTopRecommendations(userProfile, lenderData, 5);
+            const matches = mlPredictions.map((prediction, index) => {
+                const originalLender = lenders.find(l => l.id === prediction.lenderId);
+                if (!originalLender) {
+                    throw new Error(`Lender ${prediction.lenderId} not found`);
+                }
+                return {
+                    ...originalLender,
+                    eligibilityScore: prediction.matchScore > 50 ? 85 : 65,
+                    qualityScore: Math.round(prediction.matchScore * 0.8),
+                    affordabilityScore: Math.round(prediction.matchScore * 0.7),
+                    specializationScore: Math.round(prediction.matchScore * 0.6),
+                    finalScore: Math.round(prediction.matchScore),
+                    confidence: prediction.confidence || 0.8,
+                    reasons: prediction.reasons || this.generateMLReasons(prediction.matchScore),
+                    warnings: [],
+                    rank: index + 1
+                };
+            });
+            await this.storeMatchResults(sessionId, matches);
+            return matches;
+        }
+        catch (error) {
+            console.error('ML matching error, falling back to rule-based:', error);
+            return await this.findMatchesRuleBased(sessionId, userParams, lenders);
+        }
+    }
+    async findMatchesRuleBased(sessionId, userParams, lenders) {
+        const scoredLenders = await Promise.all(lenders.map(async (lender) => {
+            const scores = this.calculateLenderScore(userParams, lender);
+            return {
+                ...lender,
+                ...scores,
+                confidence: this.calculateConfidence(scores, userParams),
+            };
+        }));
+        const eligibleLenders = scoredLenders.filter(l => l.eligibilityScore > 0);
+        const sortedLenders = eligibleLenders.sort((a, b) => b.finalScore - a.finalScore);
+        const topMatches = sortedLenders.slice(0, 3);
+        await this.storeMatchResults(sessionId, topMatches);
+        return topMatches;
+    }
+    generateMLReasons(matchScore) {
+        const reasons = [];
+        if (matchScore >= 80) {
+            reasons.push("Excellent match based on ML analysis");
+            reasons.push("High compatibility with your profile");
+        }
+        else if (matchScore >= 60) {
+            reasons.push("Good match based on ML analysis");
+            reasons.push("Suitable for your requirements");
+        }
+        else if (matchScore >= 40) {
+            reasons.push("Fair match based on ML analysis");
+            reasons.push("Meets basic eligibility criteria");
+        }
+        else {
+            reasons.push("Basic eligibility match");
+        }
+        return reasons;
     }
     async getAllLenders() {
         try {

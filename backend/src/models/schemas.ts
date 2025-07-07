@@ -2,11 +2,11 @@ import { z } from 'zod';
 
 // Validation schemas using Zod
 export const LoanParameterSchema = z.object({
-  loanAmount: z.number().min(1000).max(500000),
+  loanAmount: z.number().min(100000).max(100000000),
   annualIncome: z.number().positive(),
-  employmentStatus: z.enum(['salaried', 'self-employed', 'freelancer', 'unemployed']),
+  employmentStatus: z.enum(['salaried', 'self-employed', 'freelancer', 'student', 'unemployed']),
   creditScore: z.number().min(300).max(850),
-  loanPurpose: z.enum(['home', 'auto', 'personal', 'business', 'education', 'debt-consolidation']),
+  loanPurpose: z.enum(['home', 'vehicle', 'education', 'business', 'startup', 'eco', 'emergency', 'gold-backed', 'personal']),
   debtToIncomeRatio: z.number().min(0).max(1).optional(),
   employmentDuration: z.number().min(0).optional(),
 });
@@ -57,7 +57,7 @@ export const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Parameter validation helpers
 export const validateLoanAmount = (amount: number): boolean => {
-  return amount >= 1000 && amount <= 500000;
+  return amount >= 100000 && amount <= 100000000;
 };
 
 export const validateCreditScore = (score: number): boolean => {
@@ -69,11 +69,11 @@ export const validateAnnualIncome = (income: number): boolean => {
 };
 
 export const validateEmploymentStatus = (status: string): boolean => {
-  return ['salaried', 'self-employed', 'freelancer', 'unemployed'].includes(status);
+  return ['salaried', 'self-employed', 'freelancer', 'student', 'unemployed'].includes(status);
 };
 
 export const validateLoanPurpose = (purpose: string): boolean => {
-  return ['home', 'auto', 'personal', 'business', 'education', 'debt-consolidation'].includes(purpose);
+  return ['home', 'vehicle', 'education', 'business', 'startup', 'eco', 'emergency', 'gold-backed', 'personal'].includes(purpose);
 };
 
 // Error response schemas
