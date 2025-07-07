@@ -67,7 +67,7 @@ class LoanMatchingTrainer:
             'dropout': 0.2,
             'learning_rate': 0.001,
             'batch_size': 256,
-            'epochs': 100,
+            'epochs': 600,
             'early_stopping_patience': 10,
             'weight_decay': 1e-4
         }

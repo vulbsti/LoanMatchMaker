@@ -1,0 +1,7 @@
+Test Set Evaluation:
+ACCURACY: 0.9389
+PRECISION: 0.9401
+RECALL: 0.9208
+F1: 0.9304
+AUC: 0.9863
+Model artifacts saved!

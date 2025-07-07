@@ -1,0 +1,26 @@
+{
+  "total_records": 30000,
+  "positive_matches": 852,
+  "positive_rate": 0.0284,
+  "avg_match_score": 2.5666746031746035,
+  "feature_stats": {
+    "loan_amount_norm": {
+      "mean": 0.089678029,
+      "std": 0.1327729317042795,
+      "min": 0.001042,
+      "max": 0.997759
+    },
+    "annual_income_norm": {
+      "mean": 0.15457528,
+      "std": 0.15238935466059542,
+      "min": 2e-06,
+      "max": 0.599732
+    },
+    "credit_score_norm": {
+      "mean": 0.7400076470588236,
+      "std": 0.1725670448701941,
+      "min": 0.35294117647058826,
+      "max": 1.0
+    }
+  }
+}
