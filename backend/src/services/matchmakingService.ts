@@ -72,7 +72,7 @@ export class MatchmakingService {
       }));
 
       // Get ML predictions
-      const mlPredictions = await onnxMLAdapter.getTopRecommendations(userProfile, lenderData, 5);
+      const mlPredictions = await onnxMLAdapter.getTopRecommendations(userProfile, lenderData, 3);
 
       console.log(`🎯 ML generated ${mlPredictions.length} predictions`);
 
@@ -236,9 +236,10 @@ export class MatchmakingService {
 
   private calculateLenderScore(user: LoanParameters, lender: Lender): ScoringResult {
     // 1. Eligibility Score Calculation (40% weight)
+    // min income is: as per monthly salary, so dividing annual income/12 for proper comparision
     const eligibilityChecks = [
       user.loanAmount >= lender.minLoanAmount && user.loanAmount <= lender.maxLoanAmount,
-      user.annualIncome >= lender.minIncome,
+      user.annualIncome/12 >= lender.minIncome,
       user.creditScore >= lender.minCreditScore,
       lender.employmentTypes.includes(user.employmentStatus),
       !lender.loanPurpose || lender.loanPurpose === user.loanPurpose
