@@ -2,25 +2,25 @@ import { z } from 'zod';
 export declare const LoanParameterSchema: z.ZodObject<{
     loanAmount: z.ZodNumber;
     annualIncome: z.ZodNumber;
-    employmentStatus: z.ZodEnum<["salaried", "self-employed", "freelancer", "unemployed"]>;
+    employmentStatus: z.ZodEnum<["salaried", "self-employed", "freelancer", "student", "unemployed"]>;
     creditScore: z.ZodNumber;
-    loanPurpose: z.ZodEnum<["home", "auto", "personal", "business", "education", "debt-consolidation"]>;
+    loanPurpose: z.ZodEnum<["home", "vehicle", "education", "business", "startup", "eco", "emergency", "gold-backed", "personal"]>;
     debtToIncomeRatio: z.ZodOptional<z.ZodNumber>;
     employmentDuration: z.ZodOptional<z.ZodNumber>;
 }, "strip", z.ZodTypeAny, {
     loanAmount: number;
     annualIncome: number;
     creditScore: number;
-    employmentStatus: "salaried" | "self-employed" | "freelancer" | "unemployed";
-    loanPurpose: "home" | "auto" | "personal" | "business" | "education" | "debt-consolidation";
+    employmentStatus: "salaried" | "self-employed" | "freelancer" | "student" | "unemployed";
+    loanPurpose: "home" | "vehicle" | "education" | "business" | "startup" | "eco" | "emergency" | "gold-backed" | "personal";
     debtToIncomeRatio?: number | undefined;
     employmentDuration?: number | undefined;
 }, {
     loanAmount: number;
     annualIncome: number;
     creditScore: number;
-    employmentStatus: "salaried" | "self-employed" | "freelancer" | "unemployed";
-    loanPurpose: "home" | "auto" | "personal" | "business" | "education" | "debt-consolidation";
+    employmentStatus: "salaried" | "self-employed" | "freelancer" | "student" | "unemployed";
+    loanPurpose: "home" | "vehicle" | "education" | "business" | "startup" | "eco" | "emergency" | "gold-backed" | "personal";
     debtToIncomeRatio?: number | undefined;
     employmentDuration?: number | undefined;
 }>;

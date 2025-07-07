@@ -9,8 +9,8 @@ export interface LenderData {
   employmentTypes: string[];
   minCreditScore: number;
   interestRate: number;
-  loanPurpose?: string;
-  specialEligibility?: string;
+  loanPurpose?: string | undefined;
+  specialEligibility?: boolean | undefined;
 }
 
 export interface UserProfile {
@@ -56,8 +56,6 @@ export interface MLPrediction {
   matchScore: number;          // 0-100 for display
   confidence: number;          // Model confidence
   reasons: string[];           // Explainable reasons for the match
-  interestRate: number;
-  features: MLFeatures;
 }
 
 export interface TrainingConfig {
@@ -101,4 +99,20 @@ export interface MatchExplanation {
   qualityReasons: string[];
   warningReasons: string[];
   overallRating: 'excellent' | 'good' | 'fair' | 'poor';
+}
+
+// ONNX Runtime types
+export interface ScalerParams {
+  mean: number[];
+  std: number[];
+  feature_names: string[];
+  input_size: number;
+}
+
+export interface ONNXInferenceResult {
+  probability: number;
+  isGoodMatch: boolean;
+  matchScore: number;
+  features: number[];
+  normalizedFeatures: number[];
 }

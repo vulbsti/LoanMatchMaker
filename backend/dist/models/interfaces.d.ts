@@ -1,9 +1,9 @@
 export interface LoanParameters {
     loanAmount: number;
     annualIncome: number;
-    employmentStatus: 'salaried' | 'self-employed' | 'freelancer' | 'unemployed';
+    employmentStatus: 'salaried' | 'self-employed' | 'freelancer' | 'student' | 'unemployed';
     creditScore: number;
-    loanPurpose: 'home' | 'auto' | 'personal' | 'business' | 'education' | 'debt-consolidation';
+    loanPurpose: 'home' | 'vehicle' | 'education' | 'business' | 'startup' | 'eco' | 'emergency' | 'gold-backed' | 'personal';
     debtToIncomeRatio?: number;
     employmentDuration?: number;
 }

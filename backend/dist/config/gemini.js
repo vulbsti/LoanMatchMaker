@@ -105,8 +105,8 @@ When you identify loan-related information in the conversation, use this tool:
 - \`loanAmount\`: Loan amount needed (convert to full INR: 1 crore = 10,000,000)
 - \`annualIncome\`: Yearly income (convert to full INR: 1 lakh = 100,000)  
 - \`creditScore\`: Credit score (300-850 range)
-- \`employmentStatus\`: Employment type (salaried, self-employed, freelancer, unemployed)
-- \`loanPurpose\`: Loan reason (auto, home, personal, business, education, debt-consolidation)
+- \`employmentStatus\`: Employment type (salaried, self-employed, freelancer, student, unemployed)
+- \`loanPurpose\`: Loan reason (home, vehicle, education, business, startup, eco, emergency, gold-backed, personal)
 
 **INDIAN CURRENCY CONVERSION:**
 - 1 crore = 10,000,000 INR
@@ -115,10 +115,11 @@ When you identify loan-related information in the conversation, use this tool:
 - 2.5 crore = 25,000,000 INR
 
 **INTELLIGENT MAPPING:**
-- Car/vehicle/BMW → "auto"
+- Car/vehicle/BMW/auto → "vehicle"
 - House/property → "home" 
 - Software engineer/employed → "salaried"
 - Business owner → "self-employed"
+- Student/college/university → "student"
 
 **OUTPUT:** JSON with only found parameters. No explanations.
 
@@ -128,7 +129,7 @@ Output:
 \`\`\`json
 {
   "loanAmount": 20000000,
-  "loanPurpose": "auto",
+  "loanPurpose": "vehicle",
   "annualIncome": 1500000,
   "creditScore": 720
 }

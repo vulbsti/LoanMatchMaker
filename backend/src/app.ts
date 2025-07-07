@@ -9,6 +9,8 @@ import { sanitizeInput, validateContentLength } from './middleware/validation';
 import chatRoutes from './routes/chatRoutes';
 import loanRoutes from './routes/loanRoutes';
 import { APIResponse } from './models/interfaces';
+// Add import for ONNX adapter
+import { onnxMLAdapter } from './training/onnxAdapter';
 
 class App {
   public app: express.Application;
@@ -173,6 +175,20 @@ class App {
         throw new Error('Gemini API connection failed. Cannot start application.');
       } else {
         console.log('Gemini API connection established');
+      }
+      
+      // Initialize ONNX ML adapter
+      try {
+        const mlSetup = await onnxMLAdapter.checkSetup();
+        if (mlSetup.isReady) {
+          await onnxMLAdapter.initialize();
+          console.log('ONNX ML adapter initialized successfully');
+        } else {
+          console.log('ONNX ML adapter not available:', mlSetup.message);
+        }
+      } catch (error) {
+        console.warn('Failed to initialize ONNX ML adapter:', error);
+        console.log('Application will continue with rule-based matching only');
       }
       
       // Start server

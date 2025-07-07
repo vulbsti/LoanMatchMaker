@@ -6,9 +6,9 @@ export declare class AgentOrchestrator {
     private parameterService;
     constructor(geminiService: GeminiService, parameterService: ParameterService);
     processMessage(context: MessageContext): Promise<AgentResponse>;
-    private formatHistory;
-    private buildAcknowledgmentPrompt;
-    private cleanToolCallsFromResponse;
-    private buildEnhancedAcknowledgmentPrompt;
+    private performParameterExtraction;
+    private generateConversationalResponse;
+    private buildPureConversationalPrompt;
+    private ensureCleanResponse;
 }
 //# sourceMappingURL=agentOrchestrator.d.ts.map

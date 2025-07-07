@@ -190,15 +190,18 @@ EXTRACTION RULES:
    - "software engineer", "employed", "job", "salaried employee" → "salaried"
    - "business owner", "freelance", "self employed" → "self-employed"
    - "contractor", "gig worker" → "freelancer"
+   - "student", "college", "university", "studying" → "student"
    - "unemployed", "jobless" → "unemployed"
 
 3. **Loan Purpose Mapping:**
-   - "car", "vehicle", "BMW", "auto" → "auto"
+   - "car", "vehicle", "BMW", "auto" → "vehicle"
    - "house", "property", "home" → "home"
-   - "business", "startup" → "business"
+   - "business", "startup" → "startup"
    - "education", "study", "MBA" → "education"
    - "personal", "wedding", "medical" → "personal"
-   - "debt consolidation", "pay off loans" → "debt-consolidation"
+   - "emergency", "urgent" → "emergency"
+   - "gold", "gold loan" → "gold-backed"
+   - "eco", "solar", "green" → "eco"
 
 4. **Only extract explicitly mentioned information**
 5. **Return empty object if no valid parameters found**
@@ -209,8 +212,8 @@ OUTPUT FORMAT (JSON only):
   "loanAmount": <number_in_full_INR>,
   "annualIncome": <number_in_full_INR>,
   "creditScore": <number_300_to_850>,
-  "employmentStatus": <"salaried"|"self-employed"|"freelancer"|"unemployed">,
-  "loanPurpose": <"auto"|"home"|"personal"|"business"|"education"|"debt-consolidation">
+  "employmentStatus": <"salaried"|"self-employed"|"freelancer"|"student"|"unemployed">,
+  "loanPurpose": <"home"|"vehicle"|"education"|"business"|"startup"|"eco"|"emergency"|"gold-backed"|"personal">
 }
 \`\`\`
 
@@ -220,7 +223,7 @@ Response:
 \`\`\`json
 {
   "loanAmount": 20000000,
-  "loanPurpose": "auto", 
+  "loanPurpose": "vehicle", 
   "employmentStatus": "salaried",
   "annualIncome": 1500000
 }
@@ -236,11 +239,11 @@ Response:
         return score >= 300 && score <= 850;
     }
     validateEmploymentStatus(status) {
-        const validStatuses = ['salaried', 'self-employed', 'freelancer', 'unemployed'];
+        const validStatuses = ['salaried', 'self-employed', 'freelancer', 'student', 'unemployed'];
         return validStatuses.includes(status);
     }
     validateLoanPurpose(purpose) {
-        const validPurposes = ['auto', 'home', 'personal', 'business', 'education', 'debt-consolidation'];
+        const validPurposes = ['home', 'vehicle', 'education', 'business', 'startup', 'eco', 'emergency', 'gold-backed', 'personal'];
         return validPurposes.includes(purpose);
     }
     async extractParameterFromMessage(message) {
@@ -251,7 +254,7 @@ Response:
         switch (parameter) {
             case 'loanAmount':
                 if (!(0, schemas_1.validateLoanAmount)(value)) {
-                    throw (0, errorHandler_1.createValidationError)('Loan amount must be between $1,000 and $500,000');
+                    throw (0, errorHandler_1.createValidationError)('Loan amount must be between ₹1,00,000 and ₹10,00,00,000');
                 }
                 break;
             case 'annualIncome':

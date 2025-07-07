@@ -5,7 +5,8 @@ export declare class MatchmakingService {
     private useMLPredictions;
     constructor(database: DatabaseService);
     findMatches(sessionId: string, userParams: LoanParameters): Promise<LenderMatch[]>;
-    private findMatchesWithML;
+    private findMatchesWithONNX;
+    private generateWarnings;
     private findMatchesRuleBased;
     private generateMLReasons;
     getAllLenders(): Promise<Lender[]>;

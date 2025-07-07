@@ -6,6 +6,8 @@ const parameterService_1 = require("../services/parameterService");
 const matchmakingService_1 = require("../services/matchmakingService");
 const database_1 = require("../config/database");
 const config_1 = require("../config");
+const VALID_EMPLOYMENT_STATUS = ['salaried', 'self-employed', 'freelancer', 'student', 'unemployed'];
+const VALID_LOAN_PURPOSE = ['home', 'vehicle', 'education', 'business', 'startup', 'eco', 'emergency', 'gold-backed', 'personal'];
 class LoanController {
     constructor() {
         this.database = new database_1.DatabaseService(config_1.config.database);
@@ -325,15 +327,15 @@ class LoanController {
             const missingParameters = await this.parameterService.getMissingParameters(sessionId);
             const validation = {
                 loanAmount: parameters.loanAmount ?
-                    parameters.loanAmount >= 1000 && parameters.loanAmount <= 500000 : false,
+                    parameters.loanAmount >= 100000 && parameters.loanAmount <= 100000000 : false,
                 annualIncome: parameters.annualIncome ?
                     parameters.annualIncome > 0 : false,
                 creditScore: parameters.creditScore ?
                     parameters.creditScore >= 300 && parameters.creditScore <= 850 : false,
                 employmentStatus: parameters.employmentStatus ?
-                    ['salaried', 'self-employed', 'freelancer', 'unemployed'].includes(parameters.employmentStatus) : false,
+                    VALID_EMPLOYMENT_STATUS.includes(parameters.employmentStatus) : false,
                 loanPurpose: parameters.loanPurpose ?
-                    ['home', 'auto', 'personal', 'business', 'education', 'debt-consolidation'].includes(parameters.loanPurpose) : false,
+                    VALID_LOAN_PURPOSE.includes(parameters.loanPurpose) : false,
             };
             const isValid = Object.values(validation).every(Boolean) && missingParameters.length === 0;
             const response = {

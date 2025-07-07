@@ -3,11 +3,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.SuccessResponseSchema = exports.ErrorResponseSchema = exports.validateLoanPurpose = exports.validateEmploymentStatus = exports.validateAnnualIncome = exports.validateCreditScore = exports.validateLoanAmount = exports.EMAIL_REGEX = exports.PHONE_REGEX = exports.UUID_REGEX = exports.HealthCheckSchema = exports.MatchRequestSchema = exports.ParameterUpdateSchema = exports.SessionCreateSchema = exports.ChatMessageSchema = exports.LoanParameterSchema = void 0;
 const zod_1 = require("zod");
 exports.LoanParameterSchema = zod_1.z.object({
-    loanAmount: zod_1.z.number().min(1000).max(500000),
+    loanAmount: zod_1.z.number().min(100000).max(100000000),
     annualIncome: zod_1.z.number().positive(),
-    employmentStatus: zod_1.z.enum(['salaried', 'self-employed', 'freelancer', 'unemployed']),
+    employmentStatus: zod_1.z.enum(['salaried', 'self-employed', 'freelancer', 'student', 'unemployed']),
     creditScore: zod_1.z.number().min(300).max(850),
-    loanPurpose: zod_1.z.enum(['home', 'auto', 'personal', 'business', 'education', 'debt-consolidation']),
+    loanPurpose: zod_1.z.enum(['home', 'vehicle', 'education', 'business', 'startup', 'eco', 'emergency', 'gold-backed', 'personal']),
     debtToIncomeRatio: zod_1.z.number().min(0).max(1).optional(),
     employmentDuration: zod_1.z.number().min(0).optional(),
 });
@@ -41,7 +41,7 @@ exports.UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3
 exports.PHONE_REGEX = /^\+?[\d\s\-\(\)]{10,}$/;
 exports.EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const validateLoanAmount = (amount) => {
-    return amount >= 1000 && amount <= 500000;
+    return amount >= 100000 && amount <= 100000000;
 };
 exports.validateLoanAmount = validateLoanAmount;
 const validateCreditScore = (score) => {
@@ -53,11 +53,11 @@ const validateAnnualIncome = (income) => {
 };
 exports.validateAnnualIncome = validateAnnualIncome;
 const validateEmploymentStatus = (status) => {
-    return ['salaried', 'self-employed', 'freelancer', 'unemployed'].includes(status);
+    return ['salaried', 'self-employed', 'freelancer', 'student', 'unemployed'].includes(status);
 };
 exports.validateEmploymentStatus = validateEmploymentStatus;
 const validateLoanPurpose = (purpose) => {
-    return ['home', 'auto', 'personal', 'business', 'education', 'debt-consolidation'].includes(purpose);
+    return ['home', 'vehicle', 'education', 'business', 'startup', 'eco', 'emergency', 'gold-backed', 'personal'].includes(purpose);
 };
 exports.validateLoanPurpose = validateLoanPurpose;
 exports.ErrorResponseSchema = zod_1.z.object({

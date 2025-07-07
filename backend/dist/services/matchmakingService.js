@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MatchmakingService = void 0;
-const mlAdapter_1 = require("../training/mlAdapter");
+const onnxAdapter_1 = require("../training/onnxAdapter");
 class MatchmakingService {
     constructor(database) {
         this.database = database;
@@ -10,12 +10,13 @@ class MatchmakingService {
     async findMatches(sessionId, userParams) {
         try {
             const lenders = await this.getAllLenders();
-            const mlSetup = await mlAdapter_1.mlAdapter.checkSetup();
+            const mlSetup = await onnxAdapter_1.onnxMLAdapter.checkSetup();
             if (this.useMLPredictions && mlSetup.isReady) {
-                return await this.findMatchesWithML(sessionId, userParams, lenders);
+                console.log('🤖 Using ONNX ML-based matching');
+                return await this.findMatchesWithONNX(sessionId, userParams, lenders);
             }
             else {
-                console.log('Using rule-based matching (ML not available):', mlSetup.message);
+                console.log('📋 Using rule-based matching (ONNX ML not available):', mlSetup.message);
                 return await this.findMatchesRuleBased(sessionId, userParams, lenders);
             }
         }
@@ -24,8 +25,15 @@ class MatchmakingService {
             throw new Error('Failed to find loan matches');
         }
     }
-    async findMatchesWithML(sessionId, userParams, lenders) {
+    async findMatchesWithONNX(sessionId, userParams, lenders) {
         try {
+            console.log(`🧠 Running ML inference for user profile:`, {
+                loanAmount: userParams.loanAmount,
+                annualIncome: userParams.annualIncome,
+                creditScore: userParams.creditScore,
+                employmentStatus: userParams.employmentStatus,
+                loanPurpose: userParams.loanPurpose
+            });
             const userProfile = {
                 loanAmount: userParams.loanAmount,
                 annualIncome: userParams.annualIncome,
@@ -42,35 +50,56 @@ class MatchmakingService {
                 employmentTypes: lender.employmentTypes,
                 minCreditScore: lender.minCreditScore,
                 interestRate: lender.interestRate,
-                loanPurpose: lender.loanPurpose,
-                specialEligibility: lender.specialEligibility
+                loanPurpose: lender.loanPurpose || undefined,
+                specialEligibility: Boolean(lender.specialEligibility)
             }));
-            const mlPredictions = await mlAdapter_1.mlAdapter.getTopRecommendations(userProfile, lenderData, 5);
+            const mlPredictions = await onnxAdapter_1.onnxMLAdapter.getTopRecommendations(userProfile, lenderData, 5);
+            console.log(`🎯 ML generated ${mlPredictions.length} predictions`);
             const matches = mlPredictions.map((prediction, index) => {
                 const originalLender = lenders.find(l => l.id === prediction.lenderId);
                 if (!originalLender) {
                     throw new Error(`Lender ${prediction.lenderId} not found`);
                 }
+                const eligibilityScore = prediction.matchScore > 50 ? Math.min(85, 60 + prediction.matchScore * 0.4) : Math.max(30, prediction.matchScore);
+                const qualityScore = Math.round(prediction.matchScore * 0.8);
+                const affordabilityScore = Math.round(prediction.matchScore * 0.75);
+                const specializationScore = Math.round(prediction.matchScore * 0.65);
                 return {
                     ...originalLender,
-                    eligibilityScore: prediction.matchScore > 50 ? 85 : 65,
-                    qualityScore: Math.round(prediction.matchScore * 0.8),
-                    affordabilityScore: Math.round(prediction.matchScore * 0.7),
-                    specializationScore: Math.round(prediction.matchScore * 0.6),
+                    eligibilityScore: Math.round(eligibilityScore),
+                    qualityScore,
+                    affordabilityScore,
+                    specializationScore,
                     finalScore: Math.round(prediction.matchScore),
-                    confidence: prediction.confidence || 0.8,
-                    reasons: prediction.reasons || this.generateMLReasons(prediction.matchScore),
-                    warnings: [],
+                    confidence: prediction.confidence,
+                    reasons: prediction.reasons,
+                    warnings: this.generateWarnings(userParams, originalLender),
                     rank: index + 1
                 };
             });
             await this.storeMatchResults(sessionId, matches);
+            console.log(`✅ ONNX ML matching completed with ${matches.length} matches`);
             return matches;
         }
         catch (error) {
-            console.error('ML matching error, falling back to rule-based:', error);
+            console.error('❌ ONNX ML matching error, falling back to rule-based:', error);
             return await this.findMatchesRuleBased(sessionId, userParams, lenders);
         }
+    }
+    generateWarnings(userParams, lender) {
+        const warnings = [];
+        if (userParams.loanAmount > lender.maxLoanAmount * 0.9) {
+            warnings.push("You're requesting near the maximum loan amount");
+        }
+        const incomeRatio = userParams.annualIncome / lender.minIncome;
+        if (incomeRatio < 1.5 && incomeRatio >= 1.0) {
+            warnings.push("Your income just meets the minimum requirement");
+        }
+        const creditBuffer = userParams.creditScore - lender.minCreditScore;
+        if (creditBuffer < 50 && creditBuffer >= 0) {
+            warnings.push("Your credit score is close to the minimum requirement");
+        }
+        return warnings;
     }
     async findMatchesRuleBased(sessionId, userParams, lenders) {
         const scoredLenders = await Promise.all(lenders.map(async (lender) => {
@@ -219,13 +248,13 @@ class MatchmakingService {
         if (specialEligibility.includes('business') && user.employmentStatus === 'self-employed') {
             return true;
         }
-        if (specialEligibility.includes('startup') && user.loanPurpose === 'business') {
+        if (specialEligibility.includes('startup') && user.loanPurpose === 'startup') {
             return true;
         }
-        if (specialEligibility.includes('eco') && user.loanPurpose === 'auto') {
+        if (specialEligibility.includes('eco') && user.loanPurpose === 'eco') {
             return true;
         }
-        if (specialEligibility.includes('luxury') && user.loanPurpose === 'auto' && user.loanAmount >= 50000) {
+        if (specialEligibility.includes('luxury') && user.loanPurpose === 'vehicle' && user.loanAmount >= 50000) {
             return true;
         }
         return false;

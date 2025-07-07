@@ -2,7 +2,8 @@ import { DatabaseService } from '../config/database';
 import { LoanParameters, Lender, LenderMatch, ScoringResult } from '../models/interfaces';
 import { LenderRow, MatchResultRow, MatchingStatsRow, LenderStatsRow } from '../models/database-types';
 import { createNotFoundError, createValidationError } from '../middleware/errorHandler';
-import { mlAdapter } from '../training/mlAdapter';
+import { onnxMLAdapter } from '../training/onnxAdapter';
+import { LenderData, UserProfile } from '../training/types';
 
 export class MatchmakingService {
   private useMLPredictions: boolean = true; // Feature flag for ML vs rule-based
@@ -14,13 +15,14 @@ export class MatchmakingService {
       // Get all lenders from database
       const lenders = await this.getAllLenders();
       
-      // Check if ML model is available
-      const mlSetup = await mlAdapter.checkSetup();
+      // Check if ONNX ML model is available
+      const mlSetup = await onnxMLAdapter.checkSetup();
       
       if (this.useMLPredictions && mlSetup.isReady) {
-        return await this.findMatchesWithML(sessionId, userParams, lenders);
+        console.log('🤖 Using ONNX ML-based matching');
+        return await this.findMatchesWithONNX(sessionId, userParams, lenders);
       } else {
-        console.log('Using rule-based matching (ML not available):', mlSetup.message);
+        console.log('📋 Using rule-based matching (ONNX ML not available):', mlSetup.message);
         return await this.findMatchesRuleBased(sessionId, userParams, lenders);
       }
     } catch (error) {
@@ -30,14 +32,22 @@ export class MatchmakingService {
   }
 
   /**
-   * ML-based matching using trained model
+   * ONNX ML-based matching using trained model
    */
-  private async findMatchesWithML(
+  private async findMatchesWithONNX(
     sessionId: string, 
     userParams: LoanParameters, 
     lenders: Lender[]
   ): Promise<LenderMatch[]> {
     try {
+      console.log(`🧠 Running ML inference for user profile:`, {
+        loanAmount: userParams.loanAmount,
+        annualIncome: userParams.annualIncome,
+        creditScore: userParams.creditScore,
+        employmentStatus: userParams.employmentStatus,
+        loanPurpose: userParams.loanPurpose
+      });
+
       // Convert user parameters to ML format
       const userProfile = {
         loanAmount: userParams.loanAmount,
@@ -48,7 +58,7 @@ export class MatchmakingService {
       };
 
       // Convert lenders to ML format
-      const lenderData = lenders.map(lender => ({
+      const lenderData: LenderData[] = lenders.map(lender => ({
         id: lender.id,
         name: lender.name,
         minLoanAmount: lender.minLoanAmount,
@@ -57,12 +67,14 @@ export class MatchmakingService {
         employmentTypes: lender.employmentTypes,
         minCreditScore: lender.minCreditScore,
         interestRate: lender.interestRate,
-        loanPurpose: lender.loanPurpose,
-        specialEligibility: lender.specialEligibility
+        loanPurpose: lender.loanPurpose || undefined,  // Handle null
+        specialEligibility: Boolean(lender.specialEligibility)  // Convert to boolean
       }));
 
       // Get ML predictions
-      const mlPredictions = await mlAdapter.getTopRecommendations(userProfile, lenderData, 5);
+      const mlPredictions = await onnxMLAdapter.getTopRecommendations(userProfile, lenderData, 5);
+
+      console.log(`🎯 ML generated ${mlPredictions.length} predictions`);
 
       // Convert ML predictions to LenderMatch format
       const matches: LenderMatch[] = mlPredictions.map((prediction, index) => {
@@ -71,16 +83,22 @@ export class MatchmakingService {
           throw new Error(`Lender ${prediction.lenderId} not found`);
         }
 
+        // Convert ML scores to traditional scoring format
+        const eligibilityScore = prediction.matchScore > 50 ? Math.min(85, 60 + prediction.matchScore * 0.4) : Math.max(30, prediction.matchScore);
+        const qualityScore = Math.round(prediction.matchScore * 0.8);
+        const affordabilityScore = Math.round(prediction.matchScore * 0.75);
+        const specializationScore = Math.round(prediction.matchScore * 0.65);
+
         return {
           ...originalLender,
-          eligibilityScore: prediction.matchScore > 50 ? 85 : 65, // Convert ML score to eligibility
-          qualityScore: Math.round(prediction.matchScore * 0.8), // Scale ML score to quality
-          affordabilityScore: Math.round(prediction.matchScore * 0.7), // ML-derived affordability
-          specializationScore: Math.round(prediction.matchScore * 0.6), // ML-derived specialization
+          eligibilityScore: Math.round(eligibilityScore),
+          qualityScore,
+          affordabilityScore,
+          specializationScore,
           finalScore: Math.round(prediction.matchScore),
-          confidence: prediction.confidence || 0.8,
-          reasons: prediction.reasons || this.generateMLReasons(prediction.matchScore),
-          warnings: [], // ML doesn't generate warnings yet
+          confidence: prediction.confidence,
+          reasons: prediction.reasons,
+          warnings: this.generateWarnings(userParams, originalLender),
           rank: index + 1
         };
       });
@@ -88,11 +106,35 @@ export class MatchmakingService {
       // Store results in database
       await this.storeMatchResults(sessionId, matches);
 
+      console.log(`✅ ONNX ML matching completed with ${matches.length} matches`);
       return matches;
     } catch (error) {
-      console.error('ML matching error, falling back to rule-based:', error);
+      console.error('❌ ONNX ML matching error, falling back to rule-based:', error);
       return await this.findMatchesRuleBased(sessionId, userParams, lenders);
     }
+  }
+
+  private generateWarnings(userParams: LoanParameters, lender: Lender): string[] {
+    const warnings: string[] = [];
+
+    // Loan amount warnings
+    if (userParams.loanAmount > lender.maxLoanAmount * 0.9) {
+      warnings.push("You're requesting near the maximum loan amount");
+    }
+
+    // Income warnings
+    const incomeRatio = userParams.annualIncome / lender.minIncome;
+    if (incomeRatio < 1.5 && incomeRatio >= 1.0) {
+      warnings.push("Your income just meets the minimum requirement");
+    }
+
+    // Credit score warnings
+    const creditBuffer = userParams.creditScore - lender.minCreditScore;
+    if (creditBuffer < 50 && creditBuffer >= 0) {
+      warnings.push("Your credit score is close to the minimum requirement");
+    }
+
+    return warnings;
   }
 
   /**
