@@ -14,7 +14,12 @@ export class ParameterService {
   }
 
   async updateParameter(sessionId: string, parameter: keyof LoanParameters, value: any): Promise<void> {
+    console.log(`Updating parameter ${parameter} = ${value} for session ${sessionId}`);
+    
     try {
+      // Start a transaction to ensure consistency
+      await this.database.query('BEGIN');
+      
       // Validate the parameter value
       this.validateParameterValue(parameter, value);
       
@@ -25,23 +30,33 @@ export class ParameterService {
         WHERE session_id = $2
       `;
       
-      await this.database.query(updateQuery, [value, sessionId]);
+      const updateResult = await this.database.query(updateQuery, [value, sessionId]);
+      console.log(`Updated loan_parameters, affected rows: ${updateResult.rowCount}`);
       
       // Update the parameter tracking table
       const trackingColumn = this.getTrackingColumnName(parameter);
-      await this.database.query(
-        `UPDATE parameter_tracking 
-         SET ${trackingColumn} = true, updated_at = CURRENT_TIMESTAMP
-         WHERE session_id = $1`,
-        [sessionId]
-      );
+      const trackingQuery = `
+        UPDATE parameter_tracking 
+        SET ${trackingColumn} = true, updated_at = CURRENT_TIMESTAMP
+        WHERE session_id = $1
+      `;
+      
+      const trackingResult = await this.database.query(trackingQuery, [sessionId]);
+      console.log(`Updated parameter_tracking for ${parameter}, affected rows: ${trackingResult.rowCount}`);
       
       // Update completion percentage
       await this.updateCompletionPercentage(sessionId);
       
+      // Commit the transaction
+      await this.database.query('COMMIT');
+      
+      console.log(`Successfully updated parameter ${parameter} for session ${sessionId}`);
+      
     } catch (error) {
+      // Rollback on error
+      await this.database.query('ROLLBACK');
       console.error('Parameter update error:', error);
-      throw new Error('Failed to update parameter');
+      throw new Error(`Failed to update parameter ${parameter}: ${error}`);
     }
   }
 
@@ -118,15 +133,35 @@ export class ParameterService {
 
   async getMissingParameters(sessionId: string): Promise<(keyof LoanParameters)[]> {
     try {
-      const tracking = await this.getTrackingStatus(sessionId);
+      console.log(`Getting missing parameters for session: ${sessionId}`);
+      
+      // Get the current tracking status
+      const result = await this.database.query<ParameterTrackingRow>(
+        `SELECT * FROM parameter_tracking WHERE session_id = $1`,
+        [sessionId]
+      );
+      
+      if (result.rows.length === 0) {
+        console.log(`No tracking record found for session ${sessionId}, returning all parameters as missing`);
+        return ['loanAmount', 'annualIncome', 'employmentStatus', 'creditScore', 'loanPurpose'];
+      }
+      
+      // TypeScript-safe way to access the first row
+      const trackingRow = result.rows[0];
+      if (!trackingRow) {
+        console.log(`Empty tracking record for session ${sessionId}, returning all parameters as missing`);
+        return ['loanAmount', 'annualIncome', 'employmentStatus', 'creditScore', 'loanPurpose'];
+      }
+      
       const missing: (keyof LoanParameters)[] = [];
       
-      if (!tracking.loanAmountCollected) missing.push('loanAmount');
-      if (!tracking.annualIncomeCollected) missing.push('annualIncome');
-      if (!tracking.employmentStatusCollected) missing.push('employmentStatus');
-      if (!tracking.creditScoreCollected) missing.push('creditScore');
-      if (!tracking.loanPurposeCollected) missing.push('loanPurpose');
+      if (!trackingRow.loan_amount_collected) missing.push('loanAmount');
+      if (!trackingRow.annual_income_collected) missing.push('annualIncome');
+      if (!trackingRow.employment_status_collected) missing.push('employmentStatus');
+      if (!trackingRow.credit_score_collected) missing.push('creditScore');
+      if (!trackingRow.loan_purpose_collected) missing.push('loanPurpose');
       
+      console.log(`Missing parameters for session ${sessionId}:`, missing);
       return missing;
     } catch (error) {
       console.error('Get missing parameters error:', error);
@@ -136,45 +171,37 @@ export class ParameterService {
 
   async extractParametersWithLLM(userMessage: string): Promise<Partial<LoanParameters>> {
     try {
+      console.log('Extracting parameters from message:', userMessage);
+      
       const enhancedPrompt = this.buildEnhancedExtractionPrompt(userMessage);
       const response = await this.geminiService.generateContent(enhancedPrompt);
       
-      // More robust JSON extraction
-      const jsonMatch = response.match(/```json\s*(\{[\s\S]*?\})\s*```/) || 
-                       response.match(/(\{[\s\S]*?\})/);
+      console.log('LLM response for extraction:', response);
+      
+      // More robust JSON extraction with better error handling
+      let jsonMatch = response.match(/```json\s*(\{[\s\S]*?\})\s*```/);
+      if (!jsonMatch) {
+        jsonMatch = response.match(/(\{[\s\S]*?\})/);
+      }
       
       if (jsonMatch) {
-        const extracted = JSON.parse(jsonMatch[1] || jsonMatch[0]);
-        
-        // Convert all amounts to INR format for ML model compatibility
-        if (extracted.loanAmount) {
-          extracted.loanAmount = this.convertToINRFormat(extracted.loanAmount);
+        try {
+          const extractedText = jsonMatch[1] || jsonMatch[0];
+          const extracted = JSON.parse(extractedText);
+          console.log('Parsed extracted parameters:', extracted);
+          
+          // Enhanced validation and conversion
+          const validatedParams = this.validateAndProcessExtracted(extracted);
+          console.log('Validated parameters:', validatedParams);
+          
+          return validatedParams;
+        } catch (parseError) {
+          console.error('JSON parsing failed:', parseError);
+          return {};
         }
-        if (extracted.annualIncome) {
-          extracted.annualIncome = this.convertToINRFormat(extracted.annualIncome);
-        }
-        
-        // Validate extracted parameters before returning
-        const validatedParams: Partial<LoanParameters> = {};
-        
-        if (extracted.loanAmount && this.validateLoanAmount(extracted.loanAmount)) {
-          validatedParams.loanAmount = extracted.loanAmount;
-        }
-        if (extracted.annualIncome && this.validateAnnualIncome(extracted.annualIncome)) {
-          validatedParams.annualIncome = extracted.annualIncome;
-        }
-        if (extracted.creditScore && this.validateCreditScore(extracted.creditScore)) {
-          validatedParams.creditScore = extracted.creditScore;
-        }
-        if (extracted.employmentStatus && this.validateEmploymentStatus(extracted.employmentStatus)) {
-          validatedParams.employmentStatus = extracted.employmentStatus;
-        }
-        if (extracted.loanPurpose && this.validateLoanPurpose(extracted.loanPurpose)) {
-          validatedParams.loanPurpose = extracted.loanPurpose;
-        }
-        
-        return validatedParams;
       }
+      
+      console.log('No JSON found in LLM response, returning empty object');
       return {};
     } catch (error) {
       console.error('Enhanced LLM Parameter extraction error:', error);
@@ -182,29 +209,87 @@ export class ParameterService {
     }
   }
 
-  private convertToINRFormat(amount: number): number {
-    // Handle various input formats and convert to proper INR
-    if (amount >= 10000000) {
-      // Already in proper INR format (crores)
-      return amount;
-    } else if (amount >= 100000 && amount < 10000000) {
-      // Likely in lakhs, already correct
-      return amount;
-    } else if (amount >= 1000 && amount < 100000) {
-      // Likely in thousands, might need context
-      return amount;
-    } else if (amount < 1000 && amount > 0) {
-      // Likely user specified in crores/lakhs without conversion
-      if (amount <= 10) {
-        // Treat as crores
-        return amount * 10000000;
-      } else if (amount <= 1000) {
-        // Treat as lakhs
-        return amount * 100000;
+  private validateAndProcessExtracted(extracted: any): Partial<LoanParameters> {
+    const validatedParams: Partial<LoanParameters> = {};
+    
+    // Process loan amount with enhanced conversion
+    if (extracted.loanAmount !== undefined && extracted.loanAmount !== null) {
+      const convertedAmount = this.convertToINRFormat(extracted.loanAmount);
+      if (this.validateLoanAmount(convertedAmount)) {
+        validatedParams.loanAmount = convertedAmount;
+      } else {
+        console.warn(`Invalid loan amount after conversion: ${convertedAmount}`);
       }
     }
     
-    return amount;
+    // Process annual income with enhanced conversion
+    if (extracted.annualIncome !== undefined && extracted.annualIncome !== null) {
+      const convertedIncome = this.convertToINRFormat(extracted.annualIncome);
+      if (this.validateAnnualIncome(convertedIncome)) {
+        validatedParams.annualIncome = convertedIncome;
+      } else {
+        console.warn(`Invalid annual income after conversion: ${convertedIncome}`);
+      }
+    }
+    
+    // Process credit score
+    if (extracted.creditScore !== undefined && extracted.creditScore !== null) {
+      const score = parseInt(String(extracted.creditScore));
+      if (!isNaN(score) && this.validateCreditScore(score)) {
+        validatedParams.creditScore = score;
+      } else {
+        console.warn(`Invalid credit score: ${extracted.creditScore}`);
+      }
+    }
+    
+    // Process employment status
+    if (extracted.employmentStatus) {
+      const status = String(extracted.employmentStatus).toLowerCase();
+      if (this.validateEmploymentStatus(status)) {
+        validatedParams.employmentStatus = status as any;
+      } else {
+        console.warn(`Invalid employment status: ${extracted.employmentStatus}`);
+      }
+    }
+    
+    // Process loan purpose
+    if (extracted.loanPurpose) {
+      const purpose = String(extracted.loanPurpose).toLowerCase();
+      if (this.validateLoanPurpose(purpose)) {
+        validatedParams.loanPurpose = purpose as any;
+      } else {
+        console.warn(`Invalid loan purpose: ${extracted.loanPurpose}`);
+      }
+    }
+    
+    return validatedParams;
+  }
+
+  private convertToINRFormat(amount: number | string): number {
+    const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+    
+    // Handle various input formats and convert to proper INR
+    if (numAmount >= 10000000) {
+      // Already in proper INR format (crores)
+      return numAmount;
+    } else if (numAmount >= 100000 && numAmount < 10000000) {
+      // Likely in lakhs, already correct
+      return numAmount;
+    } else if (numAmount >= 1000 && numAmount < 100000) {
+      // Likely in thousands, might need context
+      return numAmount;
+    } else if (numAmount < 1000 && numAmount > 0) {
+      // Likely user specified in crores/lakhs without conversion
+      if (numAmount <= 10) {
+        // Treat as crores
+        return numAmount * 10000000;
+      } else if (numAmount <= 1000) {
+        // Treat as lakhs
+        return numAmount * 100000;
+      }
+    }
+    
+    return numAmount;
   }
 
   private buildEnhancedExtractionPrompt(userMessage: string): string {
@@ -216,66 +301,60 @@ USER MESSAGE: "${userMessage}"
 
 EXTRACTION RULES:
 1. **Currency (All amounts in INR):**
-   - 1 crore = 10,000,000 INR
-   - 1 lakh = 100,000 INR  
-   - 2.5 crore = 25,000,000 INR
-   - Convert all amounts to full INR format
+   - When user says "93522 Rs" or "93522 rupees" → extract as 93522
+   - When user says "1 lakh" → extract as 100000
+   - When user says "1 crore" → extract as 10000000
+   - When user says "2.5 lakh" → extract as 250000
+   - Convert all amounts to full INR numbers
 
-2. **Employment Status Mapping:**
-   - "software engineer", "employed", "job", "salaried employee" → "salaried"
+2. **Income Keywords:** Look for: "income", "earn", "salary", "per year", "annually", "Rs", "rupees"
+
+3. **Employment Status Mapping:**
+   - "software engineer", "employed", "job", "salaried employee", "salaried" → "salaried"
    - "business owner", "freelance", "self employed" → "self-employed"
    - "contractor", "gig worker" → "freelancer"
    - "student", "college", "university", "studying" → "student"
    - "unemployed", "jobless" → "unemployed"
 
-3. **Loan Purpose Mapping:**
+4. **Loan Purpose Mapping:**
    - "car", "vehicle", "BMW", "auto" → "vehicle"
-   - "house", "property", "home" → "home"
-   - "business", "startup" → "startup"
+   - "house", "property", "home", "home loan" → "home"
+   - "business", "startup" → "business"
    - "education", "study", "MBA" → "education"
    - "personal", "wedding", "medical" → "personal"
-   - "emergency", "urgent" → "emergency"
-   - "gold", "gold loan" → "gold-backed"
-   - "eco", "solar", "green" → "eco"
 
-4. **Only extract explicitly mentioned information**
-5. **Return empty object if no valid parameters found**
+5. **Credit Score:** Look for numbers between 300-850 mentioned as "credit score" or "score"
+
+6. **IMPORTANT:** Extract exactly what the user provides, don't make assumptions
 
 OUTPUT FORMAT (JSON only):
 \`\`\`json
 {
-  "loanAmount": <number_in_full_INR>,
-  "annualIncome": <number_in_full_INR>,
+  "loanAmount": <number_in_INR>,
+  "annualIncome": <number_in_INR>,
   "creditScore": <number_300_to_850>,
   "employmentStatus": <"salaried"|"self-employed"|"freelancer"|"student"|"unemployed">,
-  "loanPurpose": <"home"|"vehicle"|"education"|"business"|"startup"|"eco"|"emergency"|"gold-backed"|"personal">
+  "loanPurpose": <"home"|"vehicle"|"education"|"business"|"personal">
 }
 \`\`\`
 
-Example:
-User: "I need 2 crore for buying a car, I'm a software engineer earning 15 lakhs"
-Response:
-\`\`\`json
-{
-  "loanAmount": 20000000,
-  "loanPurpose": "vehicle", 
-  "employmentStatus": "salaried",
-  "annualIncome": 1500000
-}
-\`\`\``;
+Examples:
+- "My annual income is 93522" → {"annualIncome": 93522}
+- "I need 1 lakh for car" → {"loanAmount": 100000, "loanPurpose": "vehicle"}
+- "I'm salaried" → {"employmentStatus": "salaried"}`;
   }
 
   // Enhanced validation methods
   private validateLoanAmount(amount: number): boolean {
-    return amount >= 100000 && amount <= 100000000; // 1 lakh to 10 crores
+    return Number.isFinite(amount) && amount >= 100000 && amount <= 100000000; // 1 lakh to 10 crores
   }
 
   private validateAnnualIncome(income: number): boolean {
-    return income >= 100000 && income <= 50000000; // 1 lakh to 5 crores
+    return Number.isFinite(income) && income >= 100000 && income <= 50000000; // 1 lakh to 5 crores
   }
 
   private validateCreditScore(score: number): boolean {
-    return score >= 300 && score <= 850;
+    return Number.isInteger(score) && score >= 300 && score <= 850;
   }
 
   private validateEmploymentStatus(status: string): boolean {
@@ -299,36 +378,37 @@ Response:
     switch (parameter) {
       case 'loanAmount':
         if (!validateLoanAmount(value)) {
-          throw createValidationError('Loan amount must be between ₹1,00,000 and ₹10,00,00,000');
+          throw createValidationError(`Invalid loan amount: ${value}`);
         }
         break;
       case 'annualIncome':
         if (!validateAnnualIncome(value)) {
-          throw createValidationError('Annual income must be a positive number');
+          throw createValidationError(`Invalid annual income: ${value}`);
         }
         break;
       case 'creditScore':
         if (!validateCreditScore(value)) {
-          throw createValidationError('Credit score must be between 300 and 850');
+          throw createValidationError(`Invalid credit score: ${value}`);
         }
         break;
       case 'employmentStatus':
         if (!validateEmploymentStatus(value)) {
-          throw createValidationError('Invalid employment status');
+          throw createValidationError(`Invalid employment status: ${value}`);
         }
         break;
       case 'loanPurpose':
         if (!validateLoanPurpose(value)) {
-          throw createValidationError('Invalid loan purpose');
+          throw createValidationError(`Invalid loan purpose: ${value}`);
         }
         break;
       default:
-        throw createValidationError('Unknown parameter');
+        // Allow other parameters
+        break;
     }
   }
 
   private getColumnName(parameter: keyof LoanParameters): string {
-    const columnMap: { [key: string]: string } = {
+    const columnMap: Record<keyof LoanParameters, string> = {
       loanAmount: 'loan_amount',
       annualIncome: 'annual_income',
       employmentStatus: 'employment_status',
@@ -337,58 +417,60 @@ Response:
       debtToIncomeRatio: 'debt_to_income_ratio',
       employmentDuration: 'employment_duration',
     };
-    
-    return columnMap[parameter] || parameter;
+    return columnMap[parameter];
   }
 
   private getTrackingColumnName(parameter: keyof LoanParameters): string {
-    const trackingMap: { [key: string]: string } = {
+    const columnMap: Record<keyof LoanParameters, string> = {
       loanAmount: 'loan_amount_collected',
       annualIncome: 'annual_income_collected',
       employmentStatus: 'employment_status_collected',
       creditScore: 'credit_score_collected',
       loanPurpose: 'loan_purpose_collected',
+      debtToIncomeRatio: 'debt_to_income_ratio_collected',
+      employmentDuration: 'employment_duration_collected',
     };
-    
-    return trackingMap[parameter] || `${parameter}_collected`;
+    return columnMap[parameter];
   }
 
   private async updateCompletionPercentage(sessionId: string): Promise<void> {
     try {
-      const tracking = await this.getTrackingStatus(sessionId);
-      const collectedCount = [
-        tracking.loanAmountCollected,
-        tracking.annualIncomeCollected,
-        tracking.employmentStatusCollected,
-        tracking.creditScoreCollected,
-        tracking.loanPurposeCollected
-      ].filter(Boolean).length;
+      const result = await this.database.query<ParameterTrackingRow>(
+        `SELECT * FROM parameter_tracking WHERE session_id = $1`,
+        [sessionId]
+      );
       
-      const totalCount = 5; // Total number of required parameters
-      const completionPercentage = Math.round((collectedCount / totalCount) * 100);
-
+      if (result.rows.length === 0) {
+        console.warn(`No tracking record found for session ${sessionId}`);
+        return;
+      }
+      
+      const tracking = result.rows[0];
+      if (!tracking) {
+        console.warn(`Empty tracking record for session ${sessionId}`);
+        return;
+      }
+      
+      // Count collected parameters (only core 5 required parameters)
+      let collectedCount = 0;
+      if (tracking.loan_amount_collected) collectedCount++;
+      if (tracking.annual_income_collected) collectedCount++;
+      if (tracking.employment_status_collected) collectedCount++;
+      if (tracking.credit_score_collected) collectedCount++;
+      if (tracking.loan_purpose_collected) collectedCount++;
+      
+      const completionPercentage = Math.round((collectedCount / 5) * 100);
+      
       await this.database.query(
-        `UPDATE parameter_tracking SET completion_percentage = $1 WHERE session_id = $2`,
+        `UPDATE parameter_tracking 
+         SET completion_percentage = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE session_id = $2`,
         [completionPercentage, sessionId]
       );
-    } catch (error) {
-      console.error('Update completion percentage error:', error);
-    }
-  }
-
-  private async checkCompletionStatus(sessionId: string): Promise<void> {
-    try {
-      const tracking = await this.getTrackingStatus(sessionId);
       
-      if (tracking.completionPercentage === 100) {
-        // Mark parameters as complete
-        await this.database.query(
-          `UPDATE loan_parameters SET is_complete = true WHERE session_id = $1`,
-          [sessionId]
-        );
-      }
+      console.log(`Updated completion percentage to ${completionPercentage}% for session ${sessionId}`);
     } catch (error) {
-      console.error('Check completion status error:', error);
+      console.error('Error updating completion percentage:', error);
     }
   }
 }

@@ -70,20 +70,33 @@ export class ChatController {
       // Process through agent system
       const agentResponse = await this.agentOrchestrator.processMessage(messageContext);
       
-      // Handle agent decisions
+      console.log('Agent response:', JSON.stringify(agentResponse, null, 2));
+
+      // Handle agent decisions with better logic
       if (agentResponse.action === 'trigger_matching') {
-        // Check if all required parameters are collected
-        const isComplete = await this.parameterService.isComplete(sessionId);
-        if (isComplete) {
+        console.log('Triggering matching process...');
+        
+        // Double-check completion status
+        const finalParameters = await this.parameterService.getParameters(sessionId);
+        const missingParams = await this.parameterService.getMissingParameters(sessionId);
+        
+        console.log('Final check - Parameters:', finalParameters);
+        console.log('Final check - Missing:', missingParams);
+        
+        if (missingParams.length === 0) {
+          console.log('All parameters collected, finding matches...');
           const matches = await this.matchmakingService.findMatches(
             sessionId,
-            sessionData.parameters as any
+            finalParameters as any
           );
           agentResponse.matches = matches;
           agentResponse.response = `Great! I found ${matches.length} excellent loan matches for you. Here are your top options based on your profile.`;
         } else {
+          console.log('Parameters still missing, continuing collection:', missingParams);
           agentResponse.response = 'I need a bit more information before I can find your perfect loan matches. Let\'s continue with a few more questions.';
           agentResponse.action = 'continue';
+          // Recalculate completion percentage
+          agentResponse.completionPercentage = Math.round(((5 - missingParams.length) / 5) * 100);
         }
       }
       
