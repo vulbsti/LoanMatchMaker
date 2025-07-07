@@ -36,15 +36,15 @@ The system implements a **hybrid approach** with two scoring mechanisms:
 - **Specialization Score (25% weight)**: Purpose matching and special eligibility bonuses
 
 **B. ONNX-Based ML Scoring (Primary System)**
-- **Neural Network Model**: Multi-layer perceptron with dropout regularization
-- **Training Performance**: 99.67% test accuracy, ROC-AUC: 0.9991
+- **Neural Network Model**: Multi-layer perceptron with dropout regularization.
+- **GOAL: Binary Logistic Regression on features**
 - **Features Extracted**: 10 engineered features per user-lender pair
 
 #### **2. ML Pipeline**
 
 **Feature Engineering (10 Features)**:
 ```typescript
-// Normalized features (0-1 scale)
+// Normalized features (0-1 scale) as these features create most drastic scale diff
 - loanAmountNorm: min(loanAmount / 1,000,000, 1.0)
 - annualIncomeNorm: min(annualIncome / 500,000, 1.0)  
 - creditScoreNorm: creditScore / 850
