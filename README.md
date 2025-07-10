@@ -58,7 +58,7 @@ The system implements a **hybrid approach** with two scoring mechanisms:
 // Ratio-based features
 - loanToMaxRatio: loanAmount / maxLoanAmount
 - incomeMultiple: annualIncome / minIncome  
-- creditBuffer: (creditScore - minCreditScore) / 550
+- creditBuffer: (creditScore - minCreditScore) / 850
 ```
 
 **Model Architecture**:
